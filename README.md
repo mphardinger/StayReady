@@ -47,19 +47,36 @@ Also before going live:
   wrong on any host whose filesystem doesn't survive a redeploy (most PaaS
   hosts). Point it at a mounted persistent volume in that case.
 
-### Deploying to Fly.io
+### Deploying to PythonAnywhere
 
-A `Dockerfile` and `fly.toml` are included, with a persistent volume already
-wired up for the database (Fly's free tier includes real persistent storage,
-unlike most free tiers — that matters here since SQLite needs a disk that
-survives redeploys).
+PythonAnywhere's free tier gives you one web app at
+`<username>.pythonanywhere.com` on a **persistent** filesystem, so the SQLite
+database survives reloads with no extra volume setup. This app makes no
+outbound network calls, so the free tier's outbound whitelist is a non-issue.
 
-1. Create a free account at fly.io and install `flyctl`, then `fly auth login`
-   (both need your own browser/credentials — not something I can do for you).
-2. Edit `fly.toml`: change `app = "CHANGE-ME-stay-ready"` to something unique.
-3. Create the volume once: `fly volumes create stayready_data --region iad --size 1`
-4. Deploy: `fly deploy`
-5. Open it: `fly open`
+Do these in the PythonAnywhere dashboard (see `pythonanywhere_wsgi.py` for the
+WSGI file contents):
+
+1. **Bash console** (Consoles tab → Bash) — clone the repo and build a
+   virtualenv:
+   ```
+   git clone https://github.com/mphardinger/StayReady.git stayready
+   mkvirtualenv --python=/usr/bin/python3.10 stayready-venv
+   pip install -r stayready/requirements.txt
+   ```
+2. **Web tab** → *Add a new web app* → **Manual configuration** (not "Flask") →
+   Python 3.10.
+3. Set **Source code** to `/home/<username>/stayready` and **Virtualenv** to
+   `stayready-venv` (or the full `/home/<username>/.virtualenvs/stayready-venv`).
+4. Click the **WSGI configuration file** link and replace its contents with the
+   version in `pythonanywhere_wsgi.py` (it sets `STAYREADY_HTTPS=1` and points
+   at the app).
+5. **Reload** the web app, then open `<username>.pythonanywhere.com` and
+   register the first account (creates your household + starter recipes).
+
+To ship an update later: `git pull` in the Bash console, then **Reload** the
+web app. Free accounts must click **Run until 3 months from today** on the Web
+tab periodically to keep the app alive.
 
 ## What's inside
 
