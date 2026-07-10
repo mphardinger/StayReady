@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+stayready.db
+instance/
+backups/
+.claude/
