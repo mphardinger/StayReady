@@ -115,13 +115,21 @@ App.registerView('household', {
 
       budgetCard,
 
-      h('div', { class: 'card' },
+      h('div', { class: 'card', style: { marginBottom: '18px' } },
         h('h3', {}, 'Members & cooks'),
         h('p', { class: 'muted small' }, 'Assign any of these people as the cook on a planned meal. Colors show up on the calendar.'),
         members.length ? memberRows : h('div', { class: 'empty-state' },
           h('div', { class: 'big' }, App.icon('users', 32)),
           h('div', { class: 'headline' }, 'No members yet'),
           'Add the people in your household below.'),
-        addForm));
+        addForm),
+
+      h('div', { class: 'card' },
+        h('h3', {}, 'Account'),
+        h('div', { class: 'rowline', style: { borderBottom: 'none', paddingBottom: '0' } },
+          h('div', { class: 'grow' },
+            h('div', { style: { fontWeight: '700' } }, user.display_name),
+            h('div', { class: 'muted small' }, '@' + user.username)),
+          h('button', { class: 'btn', onclick: () => App.logout() }, 'Sign out'))));
   },
 });

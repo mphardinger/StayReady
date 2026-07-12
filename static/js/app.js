@@ -91,6 +91,8 @@ const App = {
   state: { user: null },
   views: {},
   NAV_ORDER: ['dashboard', 'plan', 'recipes', 'pantry', 'shopping', 'balance', 'household'],
+  // Nav labels must fit a 7-slot bottom tab bar on a 375px phone (~9 chars max).
+  NAV_SHORT: { shopping: 'Shopping' },
   MEAL_TYPES: ['breakfast', 'lunch', 'dinner'],
   MEAL_META: {
     breakfast: { label: 'Breakfast' },
@@ -211,7 +213,7 @@ const App = {
       const v = this.views[name];
       return h('a', { class: 'navlink', href: '#/' + name, 'data-view': name, 'aria-label': v.title },
         h('span', { class: 'nav-icon' }, App.icon(v.icon, 20)),
-        h('span', { class: 'nav-label' }, v.title),
+        h('span', { class: 'nav-label' }, this.NAV_SHORT[name] || v.title),
         h('span', { class: 'nav-tip' }, v.title));
     });
     document.getElementById('app').replaceChildren(

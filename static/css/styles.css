@@ -52,6 +52,17 @@ body {
 h1, h2, h3 { line-height: 1.2; margin: 0; }
 button { font-family: inherit; }
 
+/* Touch feel: no grey tap-flash, no double-tap-zoom delay, and app chrome
+   (nav, buttons, calendar cells) isn't text-selectable — long-pressing a
+   button and getting a selection handle reads as a glitch in an app.
+   Form fields and page content stay selectable. */
+html { -webkit-tap-highlight-color: transparent; }
+a, button, .input, .select, textarea, label { touch-action: manipulation; }
+.sidebar, button, .btn, .day-num, .agenda-date, .stat, .view-title {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* ============ App layout ============ */
 
 .layout { display: flex; min-height: 100vh; }
@@ -486,35 +497,57 @@ textarea.input { resize: vertical; min-height: 90px; }
 
 @media (max-width: 760px) {
   .auth-hero { display: none; }
-  .sidebar { width: 64px; padding: 16px 8px; }
-  .sidebar .brand { font-size: 16px; padding: 4px 4px 14px; text-align: center; }
-  .sidebar .brand span.brand-text { display: none; }
-  .navlink { justify-content: center; padding: 10px 6px; position: relative; }
-  .navlink .nav-label { display: none; }
-  /* Collapsed sidebar: reveal the label as a tooltip on hover. */
-  .nav-tip {
-    display: block;
-    position: absolute;
-    left: calc(100% + 10px);
-    top: 50%;
-    background: var(--ink);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-    padding: 5px 10px;
-    border-radius: 7px;
-    box-shadow: var(--shadow-lg);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(-50%) translateX(-4px);
-    transition: opacity 0.12s ease, transform 0.12s ease;
-    z-index: 300;
+  /* Phones: the sidebar becomes a fixed bottom tab bar — the native-app nav
+     pattern (hover tooltips don't exist on touch, and thumbs live at the
+     bottom of the screen). Sign out moves into the Household view. */
+  .sidebar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 16px rgba(26, 26, 31, 0.06);
+    z-index: 200;
   }
-  .navlink:hover .nav-tip { opacity: 1; visibility: visible; transform: translateY(-50%) translateX(0); }
-  .sidebar-foot .who, .sidebar-foot .hh { display: none; }
-  .main { padding: 18px 14px 50px; }
+  .sidebar .brand, .sidebar-foot { display: none; }
+  .navlink {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 7px 0 5px;
+    margin-bottom: 0;
+    min-width: 0;
+    border-radius: 9px;
+  }
+  .navlink .nav-icon { width: auto; }
+  .navlink .nav-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .nav-tip { display: none; }
+  /* Bottom padding clears the fixed tab bar; top respects a notch when the
+     PWA runs full-screen (black-translucent status bar). */
+  .main { padding: max(18px, env(safe-area-inset-top)) 14px calc(78px + env(safe-area-inset-bottom)); }
+  /* iOS auto-zooms the page when focusing any input under 16px — keep fields
+     at 16px on phones so tapping a field never zooms. */
+  .input, .select, textarea.input { font-size: 16px; }
+  /* Finger-sized tap targets (44px guideline); btn-sm lives in dense list
+     rows, so it only gets a partial bump. */
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 36px; }
   .field-row { flex-wrap: wrap; }
   .field-row > .field { min-width: 130px; }
   /* Let list rows wrap so trailing controls drop to a second line instead of
