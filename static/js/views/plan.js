@@ -15,8 +15,9 @@ App.registerView('plan', {
     }
     const month = this.month;
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-    const first = App.addDays(month, -month.getDay());          // Sunday on/before the 1st
-    const last = App.addDays(monthEnd, 6 - monthEnd.getDay());  // Saturday on/after month end
+    const ws = App.weekStart(); // 0 = Sunday, 1 = Monday (Settings)
+    const first = App.addDays(month, -((month.getDay() - ws + 7) % 7));         // week start on/before the 1st
+    const last = App.addDays(monthEnd, (ws + 6 - monthEnd.getDay() + 7) % 7);   // week end on/after month end
     const startStr = App.fmtDate(first);
     const endStr = App.fmtDate(last);
     const todayStr = App.fmtDate(App.today());
@@ -28,6 +29,7 @@ App.registerView('plan', {
     ]);
     const byKey = {};
     entries.forEach((e) => { byKey[e.date + '|' + e.meal_type] = e; });
+    const shownTypes = App.visibleMealTypes();
 
     const setMonth = (d) => { this.month = d; App.renderCurrent(); };
 
@@ -88,9 +90,13 @@ App.registerView('plan', {
       // that up front instead of offering a checkbox that would silently no-op.
       const nextDateStr = App.fmtDate(App.addDays(App.parseDate(dateStr), 1));
       const nextLunchOccupied = Boolean(byKey[nextDateStr + '|lunch']);
-      const leftoverToggle = meal === 'dinner'
+      const leftoverToggle = meal === 'dinner' && App.visibleMealTypes().includes('lunch')
         ? h('label', { class: 'leftover-toggle' + (nextLunchOccupied ? ' leftover-toggle-disabled' : '') },
-            h('input', { type: 'checkbox', checked: !nextLunchOccupied, disabled: nextLunchOccupied }),
+            h('input', {
+              type: 'checkbox',
+              checked: !nextLunchOccupied && App.leftoverDefault(),
+              disabled: nextLunchOccupied,
+            }),
             h('span', {}, App.icon('repeat', 14),
               nextLunchOccupied
                 ? " Tomorrow's lunch is already planned, so it won't be overwritten"
@@ -273,11 +279,15 @@ App.registerView('plan', {
           class: 'day-num', title: 'Focus this day',
           onclick: () => selectDay(dateStr),
         }, d.getDate()),
-        App.MEAL_TYPES.map((meal) => slotBtn(dateStr, meal))));
+        // Hidden slot types (Settings) stay rendered when occupied, so
+        // hiding breakfast never makes an already-planned meal vanish.
+        App.MEAL_TYPES.filter((meal) => shownTypes.includes(meal) || byKey[dateStr + '|' + meal])
+          .map((meal) => slotBtn(dateStr, meal))));
     }
 
+    const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const grid = h('div', { class: 'month-grid' },
-      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dow) => h('div', { class: 'month-dow' }, dow)),
+      DOW.slice(ws).concat(DOW.slice(0, ws)).map((dow) => h('div', { class: 'month-dow' }, dow)),
       cells);
     const gridWrap = h('div', { class: 'month-grid-wrap' }, grid);
 
@@ -319,7 +329,8 @@ App.registerView('plan', {
           class: 'agenda-date', onclick: () => selectDay(dateStr),
         }, d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })),
         h('div', { class: 'agenda-slots' },
-          App.MEAL_TYPES.map((meal) => agendaSlot(dateStr, meal)))));
+          App.MEAL_TYPES.filter((meal) => shownTypes.includes(meal) || byKey[dateStr + '|' + meal])
+            .map((meal) => agendaSlot(dateStr, meal)))));
     }
     const agenda = h('div', { class: 'month-agenda' }, agendaDays);
 
@@ -339,7 +350,7 @@ App.registerView('plan', {
       class: 'card',
       style: { marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '12px 16px' },
     },
-      App.MEAL_TYPES.map((mt) => App.mealTag(mt)),
+      shownTypes.map((mt) => App.mealTag(mt)),
       h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
         h('span', { class: 'cook-dot', style: { background: 'var(--tomato)' } }),
         h('span', { class: 'muted small' }, "= who's cooking")),

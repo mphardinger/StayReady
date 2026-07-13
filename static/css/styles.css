@@ -33,12 +33,119 @@
   --lunch: #5E5E66;
   --dinner: var(--red);
 
+  /* Tonal grey ramp (meal-type tags + calendar slots) and interaction tints.
+     Everything theme-dependent must live in a var — the dark theme below only
+     overrides vars, never rules. */
+  --tone-1: #ECECEF;
+  --tone-2: #DEDEE3;
+  --tone-3: #CFCFD6;
+  --tone-ink-1: #55555D;
+  --tone-ink-2: #40404A;
+  --tone-ink-3: #2C2C34;
+  --ink-invert: #FFFFFF;
+  --hover-line: #9498A2;
+  --selected-line: #B4B4BE;
+  --selected-bg: #F1F1F5;
+  --daynum-hover: #D4D4DB;
+  --empty-ink: #B9B0A2;
+  --danger-line: #E7C4C0;
+  --chip-warm-ink: #B3402A;
+  --chip-gold-ink: #9A6A14;
+  --suggest-hover: #F1D4D2;
+  --overlay: rgba(45, 42, 38, 0.45);
+
   --radius: 12px;
   --radius-sm: 8px;
   --shadow: 0 1px 2px rgba(20, 20, 26, 0.06), 0 4px 16px rgba(20, 20, 26, 0.05);
   --shadow-lg: 0 14px 44px rgba(20, 20, 26, 0.22);
   --font: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
+
+/* Dark theme. JS resolves the "System" setting to a concrete light/dark and
+   stamps <html data-theme="...">, so this single block is the whole theme. */
+[data-theme="dark"] {
+  --bg: #121216;
+  --bg-soft: #1E1E25;
+  --card: #1A1A20;
+  --ink: #ECECF1;
+  --ink-soft: #9C9CA6;
+  --line: #2B2B33;
+
+  --red: #C9414B;
+  --red-dark: #B3323C;
+  --red-soft: #3A2226;
+  --red-deep: #EFA6AC;
+  --marigold: #8A8A94;
+  --marigold-soft: #26262E;
+  --ring: rgba(201, 65, 75, 0.3);
+
+  --tone-1: #26262E;
+  --tone-2: #303038;
+  --tone-3: #3B3B45;
+  --tone-ink-1: #B9B9C3;
+  --tone-ink-2: #C9C9D3;
+  --tone-ink-3: #DDDDE7;
+  --ink-invert: #17171B;
+  --hover-line: #4E4E5A;
+  --selected-line: #565662;
+  --selected-bg: #24242C;
+  --daynum-hover: #34343E;
+  --empty-ink: #6E6E78;
+  --danger-line: #5A2E32;
+  --chip-warm-ink: #E8917F;
+  --chip-gold-ink: #D3B06A;
+  --suggest-hover: #47272C;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 14px 44px rgba(0, 0, 0, 0.55);
+}
+[data-theme="dark"] { color-scheme: dark; }
+
+/* ---- Accent themes (Settings ▸ Appearance). The design is single-accent, so
+   overriding the --red family reskins the whole app; the legacy green/tomato
+   aliases follow automatically. Each accent has a light and a dark tuning —
+   dark variants are brighter so they read on charcoal cards. ---- */
+[data-accent="navy"] {
+  --red: #1F4E79; --red-dark: #17395A; --red-soft: #E2EAF2; --red-deep: #132F4C;
+  --ring: rgba(31, 78, 121, 0.18); --suggest-hover: #D2DFEC;
+}
+[data-theme="dark"][data-accent="navy"] {
+  --red: #5B8BC9; --red-dark: #4A7AB8; --red-soft: #1C2836; --red-deep: #A9C6E8;
+  --ring: rgba(91, 139, 201, 0.3); --suggest-hover: #223245;
+}
+[data-accent="forest"] {
+  --red: #2F6B40; --red-dark: #255434; --red-soft: #E2EEE5; --red-deep: #1D4429;
+  --ring: rgba(47, 107, 64, 0.18); --suggest-hover: #D1E4D6;
+}
+[data-theme="dark"][data-accent="forest"] {
+  --red: #4F9B66; --red-dark: #418754; --red-soft: #1D2B21; --red-deep: #A3D4B2;
+  --ring: rgba(79, 155, 102, 0.3); --suggest-hover: #24382A;
+}
+[data-accent="plum"] {
+  --red: #6B3E8E; --red-dark: #583276; --red-soft: #EDE4F4; --red-deep: #46265F;
+  --ring: rgba(107, 62, 142, 0.18); --suggest-hover: #E0D0EC;
+}
+[data-theme="dark"][data-accent="plum"] {
+  --red: #9A6BC4; --red-dark: #8759B2; --red-soft: #2A2133; --red-deep: #CDB1E8;
+  --ring: rgba(154, 107, 196, 0.3); --suggest-hover: #352941;
+}
+[data-accent="charcoal"] {
+  --red: #3A3A44; --red-dark: #2C2C34; --red-soft: #E7E7EB; --red-deep: #232329;
+  --ring: rgba(58, 58, 68, 0.18); --suggest-hover: #D8D8DE;
+}
+[data-theme="dark"][data-accent="charcoal"] {
+  --red: #8D8D9C; --red-dark: #7C7C8B; --red-soft: #26262E; --red-deep: #C9C9D6;
+  --ring: rgba(141, 141, 156, 0.3); --suggest-hover: #30303A;
+}
+
+/* Accent swatch buttons in Settings */
+.accent-swatch {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: none; cursor: pointer; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.accent-swatch.active { outline: 2px solid var(--ink); outline-offset: 3px; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -128,7 +235,7 @@ a, button, .input, .select, textarea, label { touch-action: manipulation; }
 .monogram {
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px; border-radius: 10px;
-  background: var(--ink); color: #fff;
+  background: var(--ink); color: var(--ink-invert);
   font-weight: 800; font-size: 19px; letter-spacing: -0.5px; flex-shrink: 0;
 }
 .monogram-sm { width: 24px; height: 24px; border-radius: 6px; font-size: 11px; }
@@ -197,7 +304,7 @@ a, button, .input, .select, textarea, label { touch-action: manipulation; }
 .btn-primary:hover { background: var(--green-dark); }
 .btn-accent { background: var(--tomato); border-color: var(--tomato); color: #fff; }
 .btn-accent:hover { filter: brightness(0.93); background: var(--tomato); }
-.btn-danger { color: var(--red-deep); border-color: #E7C4C0; background: #fff; }
+.btn-danger { color: var(--red-deep); border-color: var(--danger-line); background: var(--card); }
 .btn-danger:hover { background: var(--red-soft); }
 .btn-ghost { border-color: transparent; background: transparent; color: var(--ink-soft); }
 .btn-ghost:hover { background: var(--bg-soft); color: var(--ink); }
@@ -239,17 +346,17 @@ textarea.input { resize: vertical; min-height: 90px; }
   white-space: nowrap;
 }
 .chip-green { background: var(--green-soft); color: var(--green-dark); }
-.chip-tomato { background: var(--tomato-soft); color: #B3402A; }
-.chip-gold { background: var(--marigold-soft); color: #9A6A14; }
+.chip-tomato { background: var(--tomato-soft); color: var(--chip-warm-ink); }
+.chip-gold { background: var(--marigold-soft); color: var(--chip-gold-ink); }
 .cook-dot {
   width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0;
 }
 
 /* Meal identity: a neutral tonal ramp, lightest (breakfast) → darkest (dinner).
    Red is reserved for interactive/status only, never for meal identity. */
-.tag-breakfast { color: #55555D; background: #ECECEF; }
-.tag-lunch { color: #40404A; background: #DEDEE3; }
-.tag-dinner { color: #2C2C34; background: #CFCFD6; }
+.tag-breakfast { color: var(--tone-ink-1); background: var(--tone-1); }
+.tag-lunch { color: var(--tone-ink-2); background: var(--tone-2); }
+.tag-dinner { color: var(--tone-ink-3); background: var(--tone-3); }
 
 /* Tables / list rows */
 .rowline {
@@ -287,7 +394,7 @@ textarea.input { resize: vertical; min-height: 90px; }
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(45, 42, 38, 0.45);
+  background: var(--overlay);
   display: flex; align-items: flex-start; justify-content: center;
   padding: 6vh 16px;
   z-index: 100;
@@ -318,7 +425,7 @@ textarea.input { resize: vertical; min-height: 90px; }
 /* Toast */
 .toast-wrap { position: fixed; right: 20px; bottom: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
 .toast {
-  background: var(--ink); color: #fff; border-radius: 10px;
+  background: var(--ink); color: var(--ink-invert); border-radius: 10px;
   padding: 11px 16px; font-size: 14px; font-weight: 600;
   box-shadow: var(--shadow-lg);
   animation: slidein 0.2s ease-out;
@@ -328,11 +435,11 @@ textarea.input { resize: vertical; min-height: 90px; }
 .toast .grow { flex: 1; min-width: 0; }
 .toast-action {
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.16); border: none; color: #fff;
+  background: rgba(128, 128, 128, 0.3); border: none; color: inherit;
   font-weight: 800; font-size: 13px; padding: 5px 12px; border-radius: 7px;
   cursor: pointer; letter-spacing: 0.2px;
 }
-.toast-action:hover { background: rgba(255, 255, 255, 0.3); }
+.toast-action:hover { background: rgba(128, 128, 128, 0.45); }
 .toast.toast-error { background: var(--red-dark); }
 .toast.toast-success { background: var(--ink); }
 @keyframes slidein { from { transform: translateY(10px); opacity: 0; } }
@@ -376,10 +483,10 @@ textarea.input { resize: vertical; min-height: 90px; }
   display: flex; flex-direction: column; gap: 3px;
   transition: border-color 0.12s, background 0.12s;
 }
-.day-cell:hover { border-color: #9498A2; }
+.day-cell:hover { border-color: var(--hover-line); }
 .day-cell.day-out { opacity: 0.45; background: var(--bg-soft); }
 .day-cell.day-today { border-color: var(--red); box-shadow: 0 0 0 2px var(--ring); }
-.day-cell.day-selected { border-color: #B4B4BE; background: #F1F1F5; }
+.day-cell.day-selected { border-color: var(--selected-line); background: var(--selected-bg); }
 /* Clickable day number → focus/select that day. */
 .day-num {
   align-self: flex-start;
@@ -390,9 +497,9 @@ textarea.input { resize: vertical; min-height: 90px; }
 }
 /* Hovering anywhere in the day's box highlights that day: a stronger box border
    plus a darker, full-contrast number pill (no scaling). */
-.day-cell:hover .day-num { background: #D4D4DB; color: var(--ink); }
+.day-cell:hover .day-num { background: var(--daynum-hover); color: var(--ink); }
 .day-cell.day-today .day-num { color: var(--red-deep); }
-.day-cell.day-selected .day-num { background: var(--ink); color: #fff; }
+.day-cell.day-selected .day-num { background: var(--ink); color: var(--ink-invert); }
 .slot {
   border: none;
   text-align: left;
@@ -409,11 +516,11 @@ textarea.input { resize: vertical; min-height: 90px; }
   overflow: hidden; white-space: nowrap;
 }
 .slot:hover { filter: brightness(0.96); }
-.slot.slot-empty { background: transparent; border: 1px dashed var(--line); color: #B9B0A2; }
+.slot.slot-empty { background: transparent; border: 1px dashed var(--line); color: var(--empty-ink); }
 .slot.slot-empty:hover { border-color: var(--green); color: var(--green); background: var(--green-soft); }
-.slot.slot-breakfast { background: #ECECEF; color: #55555D; }
-.slot.slot-lunch { background: #DEDEE3; color: #40404A; }
-.slot.slot-dinner { background: #CFCFD6; color: #2C2C34; }
+.slot.slot-breakfast { background: var(--tone-1); color: var(--tone-ink-1); }
+.slot.slot-lunch { background: var(--tone-2); color: var(--tone-ink-2); }
+.slot.slot-dinner { background: var(--tone-3); color: var(--tone-ink-3); }
 .slot .slot-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
 
 /* Mobile agenda (meal plan) — hidden on desktop, shown ≤600px in place of the grid */
@@ -423,7 +530,7 @@ textarea.input { resize: vertical; min-height: 90px; }
   padding: 10px 12px; margin-bottom: 8px;
 }
 .agenda-day.agenda-today { border-color: var(--red); box-shadow: 0 0 0 2px var(--ring); }
-.agenda-day.day-selected { border-color: #B4B4BE; }
+.agenda-day.day-selected { border-color: var(--selected-line); }
 .agenda-date {
   display: inline-block; font-family: inherit; font-weight: 800; font-size: 13px;
   color: var(--ink); background: transparent; border: none; cursor: pointer;
@@ -431,7 +538,7 @@ textarea.input { resize: vertical; min-height: 90px; }
 }
 .agenda-date:hover { background: var(--bg-soft); }
 .agenda-today .agenda-date { color: var(--red-deep); }
-.agenda-day.day-selected .agenda-date { background: var(--ink); color: #fff; }
+.agenda-day.day-selected .agenda-date { background: var(--ink); color: var(--ink-invert); }
 .agenda-slots { display: flex; flex-direction: column; gap: 6px; }
 .agenda-slot {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -445,9 +552,9 @@ textarea.input { resize: vertical; min-height: 90px; }
   display: flex; align-items: center; gap: 5px; justify-content: flex-end;
 }
 .agenda-slot-empty { border-style: dashed; }
-.agenda-slot.slot-breakfast { background: #ECECEF; }
-.agenda-slot.slot-lunch { background: #DEDEE3; }
-.agenda-slot.slot-dinner { background: #CFCFD6; }
+.agenda-slot.slot-breakfast { background: var(--tone-1); }
+.agenda-slot.slot-lunch { background: var(--tone-2); }
+.agenda-slot.slot-dinner { background: var(--tone-3); }
 
 /* ============ Auth screen ============ */
 
@@ -562,6 +669,24 @@ textarea.input { resize: vertical; min-height: 90px; }
   .month-agenda { display: block; }
 }
 
+/* One-time "add to home screen" nudge (App.maybeInstallBanner) — floats just
+   above the bottom tab bar; only ever created on ≤760px viewports. */
+.install-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  z-index: 190;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 14px;
+}
+
 /* ============ Shopping List module (views/shopping.js) ============ */
 
 .shopping-list .rowline.row-done .item-name {
@@ -609,7 +734,7 @@ textarea.input { resize: vertical; min-height: 90px; }
 
 /* "Suggest one" — the let-the-app-help button; accent-tinted to invite a click. */
 .suggest-btn { background: var(--red-soft); border-color: var(--red); color: var(--red-deep); font-weight: 700; }
-.suggest-btn:hover { background: #F1D4D2; }
+.suggest-btn:hover { background: var(--suggest-hover); }
 
 /* Leftover lunches — reuse a dinner, so they read as secondary. */
 .leftover-toggle {

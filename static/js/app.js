@@ -85,14 +85,19 @@ const ICON_DEFS = {
     ['line', { x1: 4, y1: 4, x2: 9, y2: 9 }]],
   repeat: [['polyline', { points: '17 1 21 5 17 9' }], ['path', { d: 'M3 11V9a4 4 0 0 1 4-4h14' }],
     ['polyline', { points: '7 23 3 19 7 15' }], ['path', { d: 'M21 13v2a4 4 0 0 1-4 4H3' }]],
+  sliders: [['line', { x1: 4, y1: 21, x2: 4, y2: 14 }], ['line', { x1: 4, y1: 10, x2: 4, y2: 3 }],
+    ['line', { x1: 12, y1: 21, x2: 12, y2: 12 }], ['line', { x1: 12, y1: 8, x2: 12, y2: 3 }],
+    ['line', { x1: 20, y1: 21, x2: 20, y2: 16 }], ['line', { x1: 20, y1: 12, x2: 20, y2: 3 }],
+    ['line', { x1: 1, y1: 14, x2: 7, y2: 14 }], ['line', { x1: 9, y1: 8, x2: 15, y2: 8 }],
+    ['line', { x1: 17, y1: 16, x2: 23, y2: 16 }]],
 };
 
 const App = {
   state: { user: null },
   views: {},
-  NAV_ORDER: ['dashboard', 'plan', 'recipes', 'pantry', 'shopping', 'balance', 'household'],
-  // Nav labels must fit a 7-slot bottom tab bar on a 375px phone (~9 chars max).
-  NAV_SHORT: { shopping: 'Shopping' },
+  NAV_ORDER: ['dashboard', 'plan', 'recipes', 'pantry', 'shopping', 'balance', 'household', 'settings'],
+  // Nav labels must fit an 8-slot bottom tab bar on a 375px phone (~8 chars max).
+  NAV_SHORT: { shopping: 'Shopping', household: 'House' },
   MEAL_TYPES: ['breakfast', 'lunch', 'dinner'],
   MEAL_META: {
     breakfast: { label: 'Breakfast' },
@@ -143,6 +148,129 @@ const App = {
     { key: 'nutrition', label: 'Healthiest', explain: 'best nutrition score' },
     { key: 'cost', label: 'Cheapest', explain: 'lowest cost per serving' },
   ],
+
+  /* ---------- Device preferences (Settings view; per device, localStorage) ----------
+     'sr-theme' and 'sr-accent' stay bare strings — the pre-paint script in
+     index.html reads them before this file loads. */
+
+  // Accent themes: the whole design is single-accent, so swapping the accent
+  // vars reskins every button, active state, and focus ring at once.
+  // themeColor = the light-mode browser-chrome color (accent's dark shade).
+  ACCENTS: {
+    red: { label: 'Red', swatch: '#B21E28', themeColor: '#8E1620' },
+    navy: { label: 'Navy', swatch: '#1F4E79', themeColor: '#17395A' },
+    forest: { label: 'Forest', swatch: '#2F6B40', themeColor: '#255434' },
+    plum: { label: 'Plum', swatch: '#6B3E8E', themeColor: '#583276' },
+    charcoal: { label: 'Charcoal', swatch: '#3A3A44', themeColor: '#2C2C34' },
+  },
+
+  themeSetting() {
+    try { return localStorage.getItem('sr-theme') || 'system'; } catch { return 'system'; }
+  },
+
+  accentSetting() {
+    try {
+      const a = localStorage.getItem('sr-accent');
+      return this.ACCENTS[a] ? a : 'red';
+    } catch { return 'red'; }
+  },
+
+  applyTheme(setting) {
+    if (setting) { try { localStorage.setItem('sr-theme', setting); } catch { /* private mode */ } }
+    const pref = setting || this.themeSetting();
+    const dark = pref === 'dark'
+      || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    const accent = this.accentSetting();
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.documentElement.dataset.accent = accent;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = dark ? '#1A1A20' : this.ACCENTS[accent].themeColor;
+  },
+
+  applyAccent(name) {
+    try { localStorage.setItem('sr-accent', name); } catch { /* private mode */ }
+    this.applyTheme();
+  },
+
+  // 0 = Sunday (default), 1 = Monday. Used by the month calendar.
+  weekStart() {
+    try { return localStorage.getItem('sr-weekstart') === 'mon' ? 1 : 0; } catch { return 0; }
+  },
+
+  setWeekStart(start) {
+    try { localStorage.setItem('sr-weekstart', start === 1 ? 'mon' : 'sun'); } catch { /* private mode */ }
+  },
+
+  // Whether the dinner picker's "save tomorrow's lunch as leftovers" checkbox
+  // starts checked. Default on — it matches the cook-once-eat-twice model.
+  leftoverDefault() {
+    try { return localStorage.getItem('sr-leftover-default') !== '0'; } catch { return true; }
+  },
+
+  setLeftoverDefault(on) {
+    try { localStorage.setItem('sr-leftover-default', on ? '1' : '0'); } catch { /* private mode */ }
+  },
+
+  slotPrefs() {
+    const defaults = { breakfast: true, lunch: true, dinner: true };
+    try {
+      return Object.assign(defaults, JSON.parse(localStorage.getItem('sr-slots') || '{}'));
+    } catch { return defaults; }
+  },
+
+  setSlotPref(type, shown) {
+    const p = this.slotPrefs();
+    p[type] = !!shown;
+    try { localStorage.setItem('sr-slots', JSON.stringify(p)); } catch { /* private mode */ }
+  },
+
+  // Meal slots the plan/dashboard should show. Never empty — a plan with zero
+  // slots is unusable, so dinner is the floor.
+  visibleMealTypes() {
+    const p = this.slotPrefs();
+    const shown = this.MEAL_TYPES.filter((t) => p[t]);
+    return shown.length ? shown : ['dinner'];
+  },
+
+  /* ---------- PWA install banner ----------
+     One-time nudge on phones browsing the site in a tab: the app is
+     installable, but nobody finds "Add to Home Screen" on their own. */
+
+  _installPrompt: null,
+
+  maybeInstallBanner() {
+    if (!this.state.user) return;
+    try { if (localStorage.getItem('sr-install-hide')) return; } catch { return; }
+    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+    if (!matchMedia('(max-width: 760px)').matches) return;
+    if (document.querySelector('.install-banner')) return;
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // On Android the banner is only useful once Chrome hands us the native
+    // prompt; on iOS there is no event — instructions are all we can offer.
+    if (!ios && !this._installPrompt) return;
+
+    const dismiss = () => {
+      try { localStorage.setItem('sr-install-hide', '1'); } catch { /* private mode */ }
+      banner.remove();
+    };
+    const banner = h('div', { class: 'install-banner' },
+      h('div', { class: 'grow' },
+        h('div', { class: 'bold' }, 'Put Stay Ready on your home screen'),
+        h('div', { class: 'muted small' }, ios
+          ? 'Tap Share, then "Add to Home Screen" — it opens full-screen like an app.'
+          : 'Installs like an app — no store needed.')),
+      ios ? null : h('button', {
+        class: 'btn btn-primary btn-sm',
+        onclick: () => {
+          const p = this._installPrompt;
+          this._installPrompt = null;
+          if (p) { p.prompt(); p.userChoice.finally(dismiss); } else { dismiss(); }
+        },
+      }, 'Install'),
+      h('button', { class: 'btn btn-ghost btn-sm', 'aria-label': 'Dismiss', onclick: dismiss },
+        this.icon('close', 15)));
+    document.body.appendChild(banner);
+  },
 
   /* ---------- API ---------- */
 
@@ -229,6 +357,7 @@ const App = {
             h('button', { class: 'btn btn-ghost btn-sm', style: { marginTop: '8px' }, onclick: () => App.logout() }, 'Sign out'))),
         h('main', { class: 'main', id: 'view' })));
     this.renderCurrent();
+    this.maybeInstallBanner();
   },
 
   async logout() {
@@ -238,6 +367,15 @@ const App = {
   },
 
   async boot() {
+    this.applyTheme();
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (App.themeSetting() === 'system') App.applyTheme();
+    });
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      App._installPrompt = e;
+      App.maybeInstallBanner();
+    });
     window.addEventListener('hashchange', () => { if (App.state.user) App.renderCurrent(); });
     try {
       const me = await this.api('/api/auth/me');

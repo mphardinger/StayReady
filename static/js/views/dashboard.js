@@ -60,7 +60,9 @@ App.registerView('dashboard', {
 
     const todayCard = h('div', { class: 'card' },
       h('h3', {}, "Today's meals"),
-      App.MEAL_TYPES.map(mealRow));
+      // Slot types hidden in Settings still show when something is planned.
+      App.MEAL_TYPES.filter((mt) => App.visibleMealTypes().includes(mt) || todayEntries[mt])
+        .map(mealRow));
 
     /* ----- Next 7 days card ----- */
 

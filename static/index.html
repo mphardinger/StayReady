@@ -2,6 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <script>
+    /* Stamp theme + accent before any CSS paints so dark mode never flashes
+       white. Kept in sync with App.applyTheme (js/app.js). */
+    (function () {
+      var dark = false, accent = 'red';
+      try {
+        var pref = localStorage.getItem('sr-theme') || 'system';
+        dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        accent = localStorage.getItem('sr-accent') || 'red';
+      } catch (e) { /* defaults */ }
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.dataset.accent = accent;
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Stay Ready — Meal Planning</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥕</text></svg>">
@@ -27,6 +41,7 @@
   <script src="js/views/shopping.js"></script>
   <script src="js/views/balance.js"></script>
   <script src="js/views/household.js"></script>
+  <script src="js/views/settings.js"></script>
   <script>App.boot();</script>
   <script>
     if ('serviceWorker' in navigator) {
