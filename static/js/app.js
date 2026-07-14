@@ -211,6 +211,73 @@ const App = {
     try { localStorage.setItem('sr-leftover-default', on ? '1' : '0'); } catch { /* private mode */ }
   },
 
+  /* ---------- Diet & nutrition (Settings ▸ Dietary focus) ----------
+     Tag criteria live in routes/recipes.py DIET_TAGS. All numbers are
+     estimates — surface NUTRITION_DISCLAIMER anywhere they drive decisions. */
+
+  DIETS: {
+    kidney: { label: 'Kidney-friendly', explain: 'per serving: ≤600mg sodium, ≤700mg potassium, ≤250mg phosphorus' },
+    fodmap: { label: 'Low-FODMAP', explain: 'no onion, garlic, wheat, beans, or lactose-heavy dairy as written' },
+    diabetic: { label: 'Diabetic-friendly', explain: 'per serving: ≤45g carbs, ≤10g sugar, fiber-forward' },
+    vegetarian: { label: 'Vegetarian', explain: 'no meat, poultry, or fish' },
+  },
+
+  NUTRITION_DISCLAIMER: 'Nutrition values are careful estimates, not lab measurements, and diet '
+    + 'tags are rules of thumb — not medical advice. If you follow a renal, low-FODMAP, '
+    + 'diabetic, or other medical diet, verify amounts with your care team.',
+
+  dietPrefs() {
+    try {
+      const arr = JSON.parse(localStorage.getItem('sr-diets') || '[]');
+      return Array.isArray(arr) ? arr.filter((d) => this.DIETS[d]) : [];
+    } catch { return []; }
+  },
+
+  setDietPrefs(arr) {
+    try { localStorage.setItem('sr-diets', JSON.stringify(arr)); } catch { /* private mode */ }
+  },
+
+  isQuick(r) { return r.time_minutes > 0 && r.time_minutes <= 15; },
+  isBudget(r) { return r.cost_per_serving > 0 && r.cost_per_serving <= 2; },
+
+  dietChip(tag) {
+    const meta = this.DIETS[tag];
+    if (!meta) return null;
+    return h('span', { class: 'chip chip-green', title: meta.explain + ' (estimated)' }, meta.label);
+  },
+
+  // Same normalization the backend uses for ingredient/pantry matching.
+  normName(s) { return (s || '').trim().toLowerCase().split(/\s+/).join(' '); },
+
+  // Does this recipe use any on-sale item? Substring match in either
+  // direction ("chicken breast" matches sale item "chicken").
+  saleMatches(recipe, saleNames) {
+    if (!saleNames || !saleNames.length) return [];
+    const hits = [];
+    for (const ing of recipe.ingredients || []) {
+      const n = this.normName(ing.name);
+      for (const s of saleNames) {
+        if (n.includes(s) || s.includes(n)) { hits.push(s); break; }
+      }
+    }
+    return [...new Set(hits)];
+  },
+
+  // Day-level nutrition totals for a set of plan entries (each entry = one
+  // serving per person). recipesById maps id -> full recipe JSON.
+  dayNutrition(entries, recipesById) {
+    const t = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, sodium_mg: 0, potassium_mg: 0, phosphorus_mg: 0, meals: 0 };
+    for (const e of entries) {
+      const r = recipesById[e.recipe.id];
+      if (!r) continue;
+      t.meals++;
+      for (const k of ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sugar_g', 'sodium_mg', 'potassium_mg', 'phosphorus_mg']) {
+        t[k] += r[k] || 0;
+      }
+    }
+    return t;
+  },
+
   slotPrefs() {
     const defaults = { breakfast: true, lunch: true, dinner: true };
     try {
@@ -390,7 +457,14 @@ const App = {
 
   /** App.modal({title, body, wide}) -> {el, close}. body is a Node. */
   modal({ title, body, wide }) {
-    const close = () => { overlay.remove(); document.removeEventListener('keydown', onEsc); };
+    const close = () => {
+      overlay.remove();
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('hashchange', close);
+    };
+    // Navigation (e.g. the browser back button) re-renders the view under the
+    // modal — close it rather than leaving it stranded over the new view.
+    window.addEventListener('hashchange', close);
     let downOnOverlay = false;
     const overlay = h('div', {
       class: 'modal-overlay',

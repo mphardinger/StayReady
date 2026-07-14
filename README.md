@@ -75,23 +75,35 @@ WSGI file contents):
    register the first account (creates your household + starter recipes).
 
 To ship an update later: `git pull` in the Bash console, then **Reload** the
-web app. Free accounts must click **Run until 3 months from today** on the Web
-tab periodically to keep the app alive.
+web app. If the update added or improved seed recipes, also run
+`python add_recipes.py` once (idempotent — it only fills in what's missing).
+Free accounts must click **Run until 3 months from today** on the Web tab
+periodically to keep the app alive.
 
 ## What's inside
 
-- **Today** — today's meals, who's cooking, the week ahead, and smart picks.
+- **Today** — today's meals, who's cooking, the week ahead, smart picks, and a
+  per-person nutrition summary of the day's planned meals.
 - **Meal Plan** — month calendar; click any breakfast/lunch/dinner slot to plan it.
-  Recommendations ranked ⚡ quickest, 💪 healthiest, 💰 cheapest. Assign a cook to
-  every meal. Export the month to Google Calendar (.ics download → import at
-  calendar.google.com, or Settings → Import & export).
-- **Recipes** — add/remove recipes easily; each knows its time, cost, macros, and
-  how many of its ingredients are already in your pantry.
+  Recommendations ranked ⚡ quickest, 💪 healthiest, 💰 cheapest, with filter chips
+  for time, budget, and diet. **Build my week** drafts 7 dinners around a
+  $/day budget (e.g. a strict $5/day), max cook time, diet limits, and this
+  week's sale items — review and shuffle every pick before saving. Export the
+  month to Google Calendar (.ics download).
+- **Recipes** — 45 starter recipes with per-serving nutrition estimates
+  (calories, macros, fiber, sugar, sodium, potassium, phosphorus) and
+  documented diet tags: kidney-friendly, low-FODMAP, diabetic-friendly,
+  vegetarian. Filter by any of those plus "15 min or less" and "under
+  $2/serving". *Estimates are not medical advice — the app says so wherever
+  they appear.*
 - **Pantry** — everything you have on hand, by category. "Mark cooked" on a meal
   deducts its ingredients automatically.
-- **Shopping List** — pick a date range (defaults to the next month) and get exactly
-  what to buy: planned needs minus pantry stock. "Bought ✓" restocks the pantry.
+- **Shopping List** — pick a date range and get exactly what to buy: planned
+  needs minus pantry stock. Type in **this week's sale items** from your store
+  flyer; the list flags them and the planner favors recipes that use them.
 - **Household** — members (the assignable cooks) and your invite code.
+- **Settings** — light/dark theme, accent colors, dietary focus, week start,
+  and which meal slots you plan (all per device).
 
 ## Tech
 

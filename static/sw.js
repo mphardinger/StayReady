@@ -3,7 +3,7 @@
    installable. API calls (/api/*) always go to the network — data is never
    served stale. Bump CACHE when shell assets change to force a refresh. */
 
-const CACHE = 'stay-ready-v15';
+const CACHE = 'stay-ready-v16';
 const SHELL = [
   '/',
   '/css/styles.css',

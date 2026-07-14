@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS recipes (
     protein_g REAL NOT NULL DEFAULT 0,
     carbs_g REAL NOT NULL DEFAULT 0,
     fat_g REAL NOT NULL DEFAULT 0,
+    -- Extended nutrition (per serving, ESTIMATES) for dietary tracking:
+    -- renal diets watch sodium/potassium/phosphorus; diabetic tracking watches
+    -- carbs/sugar/fiber. 0 means "not entered", the UI shows an em dash.
+    sodium_mg INTEGER NOT NULL DEFAULT 0,
+    potassium_mg INTEGER NOT NULL DEFAULT 0,
+    phosphorus_mg INTEGER NOT NULL DEFAULT 0,
+    fiber_g REAL NOT NULL DEFAULT 0,
+    sugar_g REAL NOT NULL DEFAULT 0,
+    -- Comma-separated diet tag slugs from routes/recipes.py DIET_TAGS
+    -- (kidney, fodmap, diabetic, vegetarian). Criteria documented there.
+    tags TEXT NOT NULL DEFAULT '',
     instructions TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -82,6 +93,16 @@ CREATE TABLE IF NOT EXISTS meal_plan (
     cooked INTEGER NOT NULL DEFAULT 0,
     leftover INTEGER NOT NULL DEFAULT 0,
     UNIQUE (household_id, date, meal_type)
+);
+
+-- "On sale this week" list typed in from a store flyer; the recipe
+-- recommendations and week builder prioritize recipes using these items.
+CREATE TABLE IF NOT EXISTS sale_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id INTEGER NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    price REAL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS expenses (
@@ -127,6 +148,14 @@ MIGRATIONS = {
     ],
     'expenses': [
         ('settled', 'ALTER TABLE expenses ADD COLUMN settled INTEGER NOT NULL DEFAULT 0'),
+    ],
+    'recipes': [
+        ('sodium_mg', 'ALTER TABLE recipes ADD COLUMN sodium_mg INTEGER NOT NULL DEFAULT 0'),
+        ('potassium_mg', 'ALTER TABLE recipes ADD COLUMN potassium_mg INTEGER NOT NULL DEFAULT 0'),
+        ('phosphorus_mg', 'ALTER TABLE recipes ADD COLUMN phosphorus_mg INTEGER NOT NULL DEFAULT 0'),
+        ('fiber_g', 'ALTER TABLE recipes ADD COLUMN fiber_g REAL NOT NULL DEFAULT 0'),
+        ('sugar_g', 'ALTER TABLE recipes ADD COLUMN sugar_g REAL NOT NULL DEFAULT 0'),
+        ('tags', "ALTER TABLE recipes ADD COLUMN tags TEXT NOT NULL DEFAULT ''"),
     ],
 }
 

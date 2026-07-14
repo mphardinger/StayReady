@@ -87,6 +87,35 @@ App.registerView('settings', {
         + 'Anything already planned in a hidden slot stays visible.'),
       App.MEAL_TYPES.map(slotToggle));
 
+    /* ----- Dietary focus ----- */
+
+    const dietToggle = (slug) => {
+      const meta = App.DIETS[slug];
+      const active = App.dietPrefs().includes(slug);
+      return h('label', { class: 'leftover-toggle', style: { marginTop: '10px' } },
+        h('input', {
+          type: 'checkbox',
+          checked: active,
+          onchange: (e) => {
+            const prefs = App.dietPrefs().filter((d) => d !== slug);
+            if (e.target.checked) prefs.push(slug);
+            App.setDietPrefs(prefs);
+            rerender();
+          },
+        }),
+        h('span', {}, meta.label,
+          h('span', { class: 'muted small', style: { display: 'block', fontWeight: 400 } }, meta.explain)));
+    };
+
+    const dietCard = h('div', { class: 'card', style: { marginBottom: '18px' } },
+      h('h3', {}, 'Dietary focus'),
+      h('p', { class: 'muted small' },
+        'Pre-selects these filters in the recipe box, the meal picker, and the week builder, '
+        + 'and shows the numbers that matter to you on recipes and the Today page.'),
+      Object.keys(App.DIETS).map(dietToggle),
+      h('p', { class: 'muted small', style: { marginTop: '14px', marginBottom: 0 } },
+        App.NUTRITION_DISCLAIMER));
+
     /* ----- About ----- */
 
     const aboutCard = h('div', { class: 'card' },
@@ -101,6 +130,7 @@ App.registerView('settings', {
           h('div', { class: 'view-title' }, 'Settings'),
           h('div', { class: 'view-sub' }, 'Make Stay Ready fit how you actually cook.'))),
       themeCard,
+      dietCard,
       calendarCard,
       slotsCard,
       aboutCard);

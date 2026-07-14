@@ -58,6 +58,10 @@ Recipe JSON shape (used everywhere):
 {id, name, emoji, description, meal_type, time_minutes, servings, cost_total,
  cost_per_serving,            // round(cost_total / max(servings,1), 2)
  calories, protein_g, carbs_g, fat_g,
+ sodium_mg, potassium_mg, phosphorus_mg, fiber_g, sugar_g,  // per serving, ESTIMATES (0 = not entered)
+ tags,                        // list of diet slugs from routes/recipes.py DIET_TAGS
+                              // (kidney|fodmap|diabetic|vegetarian); criteria documented there.
+                              // UI must show the not-medical-advice disclaimer near diet features.
  nutrition_score,             // db.nutrition_score(calories, protein_g, len(ingredients))
  ingredients: [{id, name, quantity, unit}],
  have_count, ingredient_count // pantry match: norm_name equal AND pantry quantity > 0
@@ -104,6 +108,15 @@ Entry JSON: `{id, date, meal_type, cooked: 0|1,
 - `POST '/purchase'` body `{name, quantity, unit, category?}` → calls
   `pantry.add_stock`, commits, returns the pantry item JSON
   `{id, name, quantity, unit, category}`.
+
+### routes/sales.py — blueprint `sales`, prefix `/api/sales`
+
+Household-shared "on sale this week" list (typed in from a store flyer; there is
+no live store integration). Matching against recipe ingredients happens
+client-side by norm_name substring in either direction.
+- `GET ''` → `[{id, name, price|null}]` (name is stored normalized)
+- `POST ''` `{name*, price?}` → upserts by normalized name, 201/200
+- `DELETE '/<int:id>'` → `{ok: true}` · `DELETE ''` → clear list
 
 ### routes/calendar_export.py — blueprint `calendar_export`, prefix `/api/calendar`
 

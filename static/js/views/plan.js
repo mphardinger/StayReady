@@ -22,14 +22,17 @@ App.registerView('plan', {
     const endStr = App.fmtDate(last);
     const todayStr = App.fmtDate(App.today());
 
-    const [entries, recipes, members] = await Promise.all([
+    const [entries, recipes, members, sales] = await Promise.all([
       App.api('/api/plan?start=' + startStr + '&end=' + endStr),
       App.api('/api/recipes'),
       App.api('/api/members'),
+      App.api('/api/sales'),
     ]);
     const byKey = {};
     entries.forEach((e) => { byKey[e.date + '|' + e.meal_type] = e; });
     const shownTypes = App.visibleMealTypes();
+    const saleNames = sales.map((s) => s.name);
+    const onSale = (r) => App.saleMatches(r, saleNames).length > 0;
 
     const setMonth = (d) => { this.month = d; App.renderCurrent(); };
 
@@ -53,6 +56,16 @@ App.registerView('plan', {
       let tab = 'all';
       let search = '';
       let selectedId = entry ? entry.recipe.id : null;
+      // Need filters (quick/budget/diet), pre-selected from Settings ▸ Dietary focus.
+      const needs = new Set(App.dietPrefs());
+      const passesNeeds = (r) => {
+        for (const n of needs) {
+          if (n === 'quick' && !App.isQuick(r)) return false;
+          if (n === 'budget' && !App.isBudget(r)) return false;
+          if (App.DIETS[n] && !(r.tags || []).includes(n)) return false;
+        }
+        return true;
+      };
 
       const saveBtn = h('button', {
         class: 'btn btn-primary', disabled: !selectedId, onclick: () => save(),
@@ -63,14 +76,21 @@ App.registerView('plan', {
       const suggestBtn = h('button', {
         class: 'btn suggest-btn', type: 'button',
         onclick: () => {
-          const pool = [...new Set([
-            ...App.recommend(recipes, 'time', meal, 5),
-            ...App.recommend(recipes, 'cost', meal, 5),
-            ...App.recommend(recipes, 'nutrition', meal, 5),
+          const base = matching.filter(passesNeeds);
+          let pool = [...new Set([
+            ...App.recommend(base, 'time', meal, 5),
+            ...App.recommend(base, 'cost', meal, 5),
+            ...App.recommend(base, 'nutrition', meal, 5),
           ])].filter((r) => r.id !== selectedId);
-          const src = pool.length ? pool : matching.filter((r) => r.id !== selectedId);
+          // Bias the shuffle toward recipes using this week's sale items.
+          pool = pool.concat(pool.filter(onSale));
+          // Fallback also respects the active filter chips — suggesting a
+          // recipe the filtered list can't even show would look broken.
+          const src = pool.length ? pool : base.filter((r) => r.id !== selectedId);
           if (!src.length) {
-            App.toast('No other recipes for this meal yet — add more in Recipes.', 'error');
+            App.toast(needs.size
+              ? 'Nothing fits the active filter chips — turn one off or add recipes.'
+              : 'No other recipes for this meal yet — add more in Recipes.', 'error');
             return;
           }
           selectedId = src[Math.floor(Math.random() * src.length)].id;
@@ -103,6 +123,24 @@ App.registerView('plan', {
                 : " Also save tomorrow's lunch as leftovers"))
         : null;
 
+      // Per-row nutrient line for the diets the user tracks (Settings).
+      const dietLine = (r) => {
+        const prefs = App.dietPrefs();
+        const bits = [];
+        if (prefs.includes('kidney')) {
+          bits.push('Na ' + (r.sodium_mg || '—') + ' · K ' + (r.potassium_mg || '—')
+            + ' · P ' + (r.phosphorus_mg || '—') + ' mg');
+        }
+        if (prefs.includes('diabetic')) {
+          bits.push('carbs ' + App.fmtQty(r.carbs_g) + 'g · sugar '
+            + (r.sugar_g ? App.fmtQty(r.sugar_g) + 'g' : '—') + ' · fiber '
+            + (r.fiber_g ? App.fmtQty(r.fiber_g) + 'g' : '—'));
+        }
+        return bits.length
+          ? h('div', { class: 'muted small', style: { marginTop: '2px' } }, bits.join('   ·   '))
+          : null;
+      };
+
       const recipeRow = (r) => h('div', {
         class: 'rowline pick-row' + (r.id === selectedId ? ' selected' : ''),
         onclick: () => { selectedId = r.id; saveBtn.disabled = false; drawRows(); },
@@ -114,9 +152,12 @@ App.registerView('plan', {
             App.statChip('time', r),
             App.statChip('cost', r),
             App.statChip('nutrition', r),
+            onSale(r) ? h('span', { class: 'chip chip-gold' }, 'on sale') : null,
+            (r.tags || []).filter((t) => needs.has(t)).map((t) => App.dietChip(t)),
             h('span', {
               class: 'chip' + (r.ingredient_count > 0 && r.have_count === r.ingredient_count ? ' chip-green' : ''),
-            }, 'have ' + r.have_count + '/' + r.ingredient_count))));
+            }, 'have ' + r.have_count + '/' + r.ingredient_count)),
+          dietLine(r)));
 
       const searchInput = h('input', {
         class: 'input', placeholder: 'Search recipes…', style: { marginBottom: '10px' },
@@ -134,20 +175,36 @@ App.registerView('plan', {
           }, c.label)));
       };
 
+      // Quick-filter chips (time/budget/diet); active ones AND together.
+      const needChips = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' } },
+        [['quick', '≤15 min'], ['budget', '<$2/serv'],
+          ...Object.entries(App.DIETS).map(([slug, m]) => [slug, m.label])].map(([key, label]) =>
+          h('button', {
+            class: 'btn btn-sm' + (needs.has(key) ? ' btn-primary' : ''), type: 'button',
+            onclick: (e) => {
+              needs.has(key) ? needs.delete(key) : needs.add(key);
+              e.currentTarget.classList.toggle('btn-primary', needs.has(key));
+              drawRows();
+            },
+          }, label)));
+
       const drawRows = () => {
         searchInput.style.display = tab === 'all' ? '' : 'none';
+        const base = matching.filter(passesNeeds);
         let list;
         if (tab === 'all') {
           const q = search.trim().toLowerCase();
-          list = matching.filter((r) => r.name.toLowerCase().includes(q));
+          list = base.filter((r) => r.name.toLowerCase().includes(q));
+          // Recipes using this week's sale items float to the top.
+          if (saleNames.length) list = [...list.filter(onSale), ...list.filter((r) => !onSale(r))];
         } else {
-          list = App.recommend(recipes, tab, meal, 6);
+          list = App.recommend(base, tab, meal, 6);
         }
         if (!list.length) {
           listWrap.replaceChildren(h('div', { class: 'empty-state', style: { padding: '28px 16px' } },
             h('div', { class: 'big' }, App.icon('book', 30)),
             h('div', { class: 'headline' }, matching.length ? 'Nothing matches' : 'No recipes for this meal yet'),
-            matching.length ? 'Try a different search.' : 'Add a few in the Recipes tab, then come plan them here.'));
+            matching.length ? 'Try a different search or turn off a filter chip.' : 'Add a few in the Recipes tab, then come plan them here.'));
           return;
         }
         listWrap.replaceChildren(...list.map(recipeRow));
@@ -227,6 +284,7 @@ App.registerView('plan', {
         body: h('div', {},
           h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' } }, suggestBtn),
           tabsWrap,
+          needChips,
           searchInput,
           listWrap,
           h('div', { class: 'field', style: { marginTop: '14px', marginBottom: 0 } },
@@ -237,6 +295,264 @@ App.registerView('plan', {
       });
       drawTabs();
       drawRows();
+    };
+
+    /* ----- week builder: draft 7 dinners around budget / time / diet ----- */
+
+    const openBuilder = async () => {
+      const days = [];
+      for (let i = 0; i < 7; i++) days.push(App.fmtDate(App.addDays(App.today(), i)));
+      // The builder's window is always today+7, which can extend past (or sit
+      // entirely outside) the month range this view fetched into byKey — so it
+      // fetches its own week. Anything less risks silently overwriting meals.
+      let planned;
+      try {
+        const weekPlan = await App.api('/api/plan?start=' + days[0] + '&end=' + days[6]);
+        planned = {};
+        weekPlan.forEach((e) => { planned[e.date + '|' + e.meal_type] = e; });
+      } catch (err) { App.toast(err.message, 'error'); return; }
+      const recipesById = {};
+      recipes.forEach((r) => { recipesById[r.id] = r; });
+
+      const budgetInput = h('input', {
+        class: 'input', type: 'number', step: 'any', min: 0, value: '5.00',
+        style: { maxWidth: '110px' },
+      });
+      const timeSelect = h('select', { class: 'select', style: { width: 'auto' } },
+        [['', 'Any time'], ['15', '15 min or less'], ['30', '30 min or less'], ['45', '45 min or less']]
+          .map(([v, l]) => h('option', { value: v }, l)));
+      const dietNeeds = new Set(App.dietPrefs().filter((d) => App.DIETS[d]));
+      const dietChips = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+        Object.entries(App.DIETS).map(([slug, m]) => h('button', {
+          class: 'btn btn-sm' + (dietNeeds.has(slug) ? ' btn-primary' : ''), type: 'button',
+          onclick: (e) => {
+            dietNeeds.has(slug) ? dietNeeds.delete(slug) : dietNeeds.add(slug);
+            e.currentTarget.classList.toggle('btn-primary', dietNeeds.has(slug));
+          },
+        }, m.label)));
+      const salesBox = h('input', { type: 'checkbox', checked: saleNames.length > 0, disabled: !saleNames.length });
+      const leftoverBox = h('input', {
+        type: 'checkbox',
+        checked: App.leftoverDefault() && App.visibleMealTypes().includes('lunch'),
+        disabled: !App.visibleMealTypes().includes('lunch'),
+      });
+
+      const draftWrap = h('div', {});
+      let draft = {}; // dateStr -> recipe (only for days being filled)
+
+      // Empty budget field = no cap; 0 or negative = a strict cap the user
+      // typed (which honestly filters everything out, rather than silently
+      // meaning "unlimited").
+      const budgetVal = () => {
+        const raw = budgetInput.value.trim();
+        if (raw === '') return null;
+        const n = parseFloat(raw);
+        return Number.isFinite(n) ? Math.max(n, 0) : null;
+      };
+
+      const candidatesFor = () => {
+        const maxMin = Number(timeSelect.value) || 0;
+        const budget = budgetVal();
+        // With leftover lunches each dinner serving gets eaten twice per day
+        // (tonight + tomorrow's lunch), so a day's dinner spend is ~2 servings.
+        // Without leftovers, dinner gets ~60% of the day's food money.
+        const capPerServing = budget === null ? null
+          : (leftoverBox.checked ? budget / 2 : budget * 0.6);
+        return recipes.filter((r) =>
+          App.mealMatches(r.meal_type, 'dinner')
+          && (!maxMin || r.time_minutes <= maxMin)
+          && [...dietNeeds].every((d) => (r.tags || []).includes(d))
+          && (capPerServing === null || r.cost_per_serving <= capPerServing));
+      };
+
+      const score = (r) => {
+        let s = r.cost_per_serving;
+        if (salesBox.checked && onSale(r)) s -= 0.75;
+        if (r.ingredient_count > 0) s -= 0.4 * (r.have_count / r.ingredient_count);
+        return s;
+      };
+
+      // The recipe a given day will serve: drafted, or already planned ("kept").
+      const recipeOn = (dateStr) => {
+        if (draft[dateStr]) return draft[dateStr];
+        const kept = planned[dateStr + '|dinner'];
+        return kept ? (recipesById[kept.recipe.id] || null) : null;
+      };
+
+      const pickFor = (dateStr, exclude) => {
+        // Repeat caps and the no-back-to-back rule count BOTH drafted and kept
+        // dinners, and ignore the day being (re)picked itself.
+        const used = {};
+        for (const d of days) {
+          if (d === dateStr) continue;
+          const r = recipeOn(d);
+          if (r) used[r.id] = (used[r.id] || 0) + 1;
+        }
+        const neighborIds = [-1, 1]
+          .map((off) => recipeOn(App.fmtDate(App.addDays(App.parseDate(dateStr), off))))
+          .filter(Boolean)
+          .map((r) => r.id);
+        const pool = candidatesFor()
+          .filter((r) => r.id !== exclude && (used[r.id] || 0) < 2 && !neighborIds.includes(r.id))
+          .sort((a, b) => score(a) - score(b))
+          .slice(0, 8);
+        if (!pool.length) return null;
+        return pool[Math.floor(Math.random() * Math.min(pool.length, 4))];
+      };
+
+      const drawDraft = () => {
+        const rows = days.map((dateStr) => {
+          const existing = planned[dateStr + '|dinner'];
+          if (existing) {
+            return h('div', { class: 'rowline' },
+              h('div', { class: 'bold small', style: { width: '86px', flexShrink: 0 } }, App.fmtHuman(dateStr)),
+              h('div', { class: 'grow truncate' }, existing.recipe.name),
+              h('span', { class: 'chip' }, 'already planned — kept'));
+          }
+          const r = draft[dateStr];
+          if (!r) {
+            return h('div', { class: 'rowline' },
+              h('div', { class: 'bold small', style: { width: '86px', flexShrink: 0 } }, App.fmtHuman(dateStr)),
+              h('div', { class: 'grow muted' }, 'No recipe fits these limits'));
+          }
+          return h('div', { class: 'rowline' },
+            h('div', { class: 'bold small', style: { width: '86px', flexShrink: 0 } }, App.fmtHuman(dateStr)),
+            h('div', { class: 'grow' },
+              h('div', { class: 'bold truncate' }, r.name),
+              h('div', { style: { display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '2px' } },
+                App.statChip('cost', r),
+                App.statChip('time', r),
+                salesBox.checked && onSale(r) ? h('span', { class: 'chip chip-gold' }, 'on sale') : null,
+                (r.tags || []).filter((t) => dietNeeds.has(t)).map((t) => App.dietChip(t)))),
+            h('button', {
+              class: 'btn btn-sm btn-icon', title: 'Shuffle this day', type: 'button',
+              onclick: () => {
+                const next = pickFor(dateStr, r.id);
+                if (!next) { App.toast('No other recipe fits these limits', 'error'); return; }
+                draft[dateStr] = next;
+                drawDraft();
+              },
+            }, App.icon('shuffle', 14)));
+        });
+
+        const drafted = Object.values(draft);
+        let summary = null;
+        if (drafted.length) {
+          // Per the builder's own model: with leftovers on, each dinner
+          // serving is eaten twice (dinner + next-day lunch), so a person's
+          // real cost is 2 servings per dinner-day. Days with no dinner at
+          // all don't dilute the average.
+          const factor = leftoverBox.checked ? 2 : 1;
+          const dinnerDays = days.filter((d) => recipeOn(d));
+          const totalCost = dinnerDays.reduce((sum, d) => sum + recipeOn(d).cost_per_serving, 0) * factor;
+          const perDay = dinnerDays.length ? totalCost / dinnerDays.length : 0;
+          const budget = budgetVal();
+          const mealsCovered = dinnerDays.length + ' dinner' + (dinnerDays.length === 1 ? '' : 's')
+            + (leftoverBox.checked ? ' + their leftover lunches' : '');
+          summary = h('div', { style: { marginTop: '12px' } },
+            h('div', { class: 'bold' },
+              'Est. ' + App.fmtMoney(perDay) + '/person/day — ' + mealsCovered + ' for '
+              + App.fmtMoney(totalCost) + '/person this week'),
+            budget !== null ? h('div', {
+              class: 'small',
+              style: { fontWeight: 700, color: perDay <= budget ? 'var(--ink-soft)' : 'var(--red-deep)', marginTop: '3px' },
+            }, perDay <= budget
+              ? 'Under your ' + App.fmtMoney(budget) + '/day target'
+              : 'Over your ' + App.fmtMoney(budget) + '/day target — shuffle the pricey days or raise the cap') : null,
+            h('div', { class: 'muted small', style: { marginTop: '3px' } },
+              'Recipe costs are estimates; breakfasts aren’t counted. Nothing is saved until you accept.'));
+        }
+
+        acceptBtn.style.display = drafted.length ? '' : 'none';
+        draftWrap.replaceChildren(
+          h('div', { class: 'card', style: { marginTop: '14px', padding: '12px 14px' } }, rows, summary));
+      };
+
+      const generate = () => {
+        draft = {};
+        const open = days.filter((d) => !planned[d + '|dinner']);
+        if (!open.length) {
+          App.toast('Every dinner this week is already planned', 'error');
+          return;
+        }
+        for (const d of open) {
+          const r = pickFor(d, null);
+          if (r) draft[d] = r;
+        }
+        if (!Object.keys(draft).length) {
+          draftWrap.replaceChildren(h('div', { class: 'card', style: { marginTop: '14px' } },
+            h('div', { class: 'empty-state', style: { padding: '20px 14px' } },
+              h('div', { class: 'headline' }, 'Nothing fits those limits'),
+              'Try raising the budget, allowing more time, or removing a diet filter.')));
+          acceptBtn.style.display = 'none';
+          return;
+        }
+        drawDraft();
+      };
+
+      const acceptBtn = h('button', {
+        class: 'btn btn-primary', type: 'button', style: { display: 'none' },
+        onclick: async () => {
+          if (acceptBtn.disabled) return;
+          acceptBtn.disabled = true;
+          const entries2 = Object.entries(draft);
+          let saved = 0;
+          try {
+            for (const [dateStr, r] of entries2) {
+              await App.api('/api/plan', 'PUT', {
+                date: dateStr, meal_type: 'dinner', recipe_id: r.id,
+                cook_member_id: null,
+                leftover_lunch: leftoverBox.checked,
+              });
+              saved++;
+            }
+            modal.close();
+            App.toast(saved + ' dinner' + (saved === 1 ? '' : 's') + ' planned'
+              + (leftoverBox.checked ? ' · leftover lunches queued' : '')
+              + ' — assign cooks from the calendar');
+            App.renderCurrent();
+          } catch (err) {
+            acceptBtn.disabled = false;
+            App.toast(err.message + (saved ? ' — ' + saved + ' saved before the error' : ''), 'error');
+          }
+        },
+      }, 'Accept & plan it');
+
+      const modal = App.modal({
+        title: 'Build my week',
+        wide: true,
+        body: h('div', {},
+          h('p', { class: 'muted small', style: { marginTop: 0 } },
+            'Drafts the next 7 dinners around your budget, time, and diet limits. '
+            + 'You review every pick before anything is saved.'),
+          h('div', { class: 'field-row', style: { alignItems: 'flex-end' } },
+            h('div', { class: 'field', style: { marginBottom: 0 } },
+              h('label', {}, 'Budget per person per day ($)'),
+              h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
+                budgetInput,
+                h('button', {
+                  class: 'btn btn-sm', type: 'button',
+                  onclick: () => { budgetInput.value = '5.00'; },
+                }, '$5 strict'),
+                h('button', {
+                  class: 'btn btn-sm', type: 'button', title: 'No budget cap',
+                  onclick: () => { budgetInput.value = ''; },
+                }, 'No cap'))),
+            h('div', { class: 'field', style: { marginBottom: 0 } },
+              h('label', {}, 'Max cook time'), timeSelect)),
+          h('div', { class: 'field', style: { marginTop: '12px' } },
+            h('label', {}, 'Diet limits (from your Settings — tap to change)'), dietChips),
+          h('label', { class: 'leftover-toggle', style: { marginTop: '4px' } },
+            salesBox, h('span', {}, 'Favor this week’s sale items'
+              + (saleNames.length ? '' : ' (none listed — add some on the Shopping tab)'))),
+          h('label', { class: 'leftover-toggle', style: { marginTop: '8px' } },
+            leftoverBox, h('span', {}, App.icon('repeat', 14), ' Each dinner also covers the next day’s lunch as leftovers')),
+          h('div', { style: { display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' } },
+            h('button', { class: 'btn btn-accent', type: 'button', onclick: generate },
+              App.icon('shuffle', 15), 'Draft my week'),
+            acceptBtn),
+          draftWrap),
+      });
     };
 
     /* ----- month grid ----- */
@@ -362,6 +678,8 @@ App.registerView('plan', {
           h('div', { class: 'view-title' }, 'Meal Plan'),
           h('div', { class: 'view-sub' }, sub)),
         h('div', { class: 'view-actions' },
+          h('button', { class: 'btn btn-accent', onclick: openBuilder },
+            App.icon('shuffle', 15), 'Build my week'),
           h('div', { class: 'bold', style: { fontSize: '17px', minWidth: '160px', textAlign: 'center' } },
             App.monthLabel(month)),
           h('button', {

@@ -10,11 +10,21 @@ App.registerView('shopping', {
       start: App.fmtDate(App.today()),
       end: App.fmtDate(App.addDays(App.today(), 29)), // next month of meal prep
     };
-    let data = await App.api('/api/shopping?start=' + range.start + '&end=' + range.end);
+    let [data, sales] = await Promise.all([
+      App.api('/api/shopping?start=' + range.start + '&end=' + range.end),
+      App.api('/api/sales'),
+    ]);
 
     const statsWrap = h('div', { class: 'stat-row', style: { marginBottom: '18px' } });
     const budgetWrap = h('div', { style: { marginBottom: '18px' } });
+    const salesWrap = h('div', { style: { marginBottom: '18px' } });
     const listWrap = h('div', { class: 'shopping-list' });
+
+    // Sale item matching an ingredient name (substring either way), or null.
+    const saleFor = (name) => {
+      const n = App.normName(name);
+      return sales.find((s) => n.includes(s.name) || s.name.includes(n)) || null;
+    };
 
     /* ---------- range controls ---------- */
 
@@ -143,6 +153,82 @@ App.registerView('shopping', {
             'Track what you actually spent on the Balance tab →'))));
     };
 
+    /* ---------- on sale this week ----------
+       The inputs and card are built ONCE; drawSales only refreshes the chip
+       list, so adding/removing items never steals focus or half-typed text. */
+
+    const saleNameInput = h('input', {
+      class: 'input', placeholder: 'e.g. chicken thighs', maxlength: 60,
+      style: { flex: '1 1 140px' },
+    });
+    const salePriceInput = h('input', {
+      class: 'input', type: 'number', step: 'any', min: 0, placeholder: '$ (optional)',
+      style: { flex: '0 1 110px' },
+    });
+    const addSale = async () => {
+      const name = saleNameInput.value.trim();
+      if (!name) return;
+      try {
+        await App.api('/api/sales', 'POST', { name, price: salePriceInput.value || null });
+        sales = await App.api('/api/sales');
+        saleNameInput.value = '';
+        salePriceInput.value = '';
+        saleNameInput.focus();
+        drawSales();
+        drawList();
+      } catch (err) { App.toast(err.message, 'error'); }
+    };
+    saleNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSale(); } });
+    salePriceInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSale(); } });
+
+    const saleChipsWrap = h('div', {
+      style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' },
+    });
+    const clearSalesBtn = h('button', {
+      class: 'btn btn-ghost btn-sm',
+      onclick: async () => {
+        if (!confirm('Clear the whole sale list? (Do this when the new flyer comes out.)')) return;
+        try {
+          await App.api('/api/sales', 'DELETE');
+          sales = [];
+          drawSales();
+          drawList();
+        } catch (err) { App.toast(err.message, 'error'); }
+      },
+    }, 'Clear all');
+
+    salesWrap.replaceChildren(h('div', { class: 'card' },
+      h('h3', {}, 'On sale this week'),
+      h('p', { class: 'muted small' },
+        'Type in the good deals from your store’s flyer. Sale items get flagged on this '
+        + 'list, and the meal picker and week builder favor recipes that use them.'),
+      saleChipsWrap,
+      h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
+        saleNameInput,
+        salePriceInput,
+        h('button', { class: 'btn btn-primary btn-sm', onclick: addSale }, '+ Add'),
+        clearSalesBtn)));
+
+    const drawSales = () => {
+      const saleRow = (s) => h('span', { class: 'chip chip-gold' },
+        s.name + (s.price != null ? ' · ' + App.fmtMoney(s.price) : ''),
+        h('button', {
+          class: 'btn btn-ghost btn-sm btn-icon', title: 'Remove', 'aria-label': 'Remove ' + s.name,
+          style: { minHeight: 'auto', padding: '0 2px', marginLeft: '2px' },
+          onclick: async () => {
+            try {
+              await App.api('/api/sales/' + s.id, 'DELETE');
+              sales = sales.filter((x) => x.id !== s.id);
+              drawSales();
+              drawList();
+            } catch (err) { App.toast(err.message, 'error'); }
+          },
+        }, App.icon('close', 12)));
+      saleChipsWrap.replaceChildren(...sales.map(saleRow));
+      saleChipsWrap.style.display = sales.length ? '' : 'none';
+      clearSalesBtn.style.display = sales.length > 1 ? '' : 'none';
+    };
+
     /* ---------- list ---------- */
 
     const markBought = async (item) => {
@@ -180,9 +266,12 @@ App.registerView('shopping', {
 
     const itemRow = (item) => {
       const unitSuffix = item.unit ? ' ' + item.unit : '';
+      const sale = saleFor(item.name);
       return h('div', { class: 'rowline' + (item.done ? ' row-done' : '') },
         h('div', { class: 'grow' },
-          h('div', { class: 'bold truncate item-name' }, item.name),
+          h('div', { class: 'bold truncate item-name' }, item.name, ' ',
+            sale ? h('span', { class: 'chip chip-gold' },
+              'on sale' + (sale.price != null ? ' ' + App.fmtMoney(sale.price) : '')) : null),
           item.recipes.length
             ? h('div', { class: 'muted small truncate' }, 'for: ' + item.recipes.join(', '))
             : null),
@@ -243,10 +332,12 @@ App.registerView('shopping', {
       rangeCard,
       statsWrap,
       budgetWrap,
+      salesWrap,
       listWrap);
 
     drawStats();
     drawBudget();
+    drawSales();
     drawList();
   },
 });

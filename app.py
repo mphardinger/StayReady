@@ -55,8 +55,9 @@ def create_app():
     from routes.calendar_export import bp as calendar_bp
     from routes.household import bp as household_bp
     from routes.balance import bp as balance_bp
+    from routes.sales import bp as sales_bp
     for bp in (auth_bp, members_bp, pantry_bp, recipes_bp, plan_bp, shopping_bp,
-               calendar_bp, household_bp, balance_bp):
+               calendar_bp, household_bp, balance_bp, sales_bp):
         app.register_blueprint(bp)
 
     @app.get('/')

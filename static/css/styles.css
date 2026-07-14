@@ -344,6 +344,11 @@ textarea.input { resize: vertical; min-height: 90px; }
   background: var(--bg-soft);
   color: var(--ink-soft);
   white-space: nowrap;
+  /* Never let a long label (recipe names) blow out a narrow flex row —
+     clamp to the container; wrap text in a .truncate span for ellipsis. */
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 .chip-green { background: var(--green-soft); color: var(--green-dark); }
 .chip-tomato { background: var(--tomato-soft); color: var(--chip-warm-ink); }

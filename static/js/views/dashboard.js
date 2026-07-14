@@ -77,8 +77,12 @@ App.registerView('dashboard', {
         h('div', { class: 'grow', style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } },
           dayEntries.map((e) => h('span', {
             class: 'chip tag-' + e.meal_type,
-            title: App.MEAL_META[e.meal_type].label,
-          }, e.recipe.name)))));
+            style: { maxWidth: '100%' },
+            title: App.MEAL_META[e.meal_type].label + ': ' + e.recipe.name,
+          }, h('span', {
+            class: 'truncate',
+            style: { display: 'inline-block', maxWidth: '100%' },
+          }, e.recipe.name))))));
     }
 
     const weekCard = h('div', { class: 'card' },
@@ -88,6 +92,51 @@ App.registerView('dashboard', {
         h('div', { class: 'headline' }, 'The week is wide open'),
         h('div', {}, 'Nothing on the menu yet — ',
           h('a', { href: '#/plan', style: { color: 'var(--red)', fontWeight: '700' } }, 'plan some meals →'))));
+
+    /* ----- Today's nutrition card ----- */
+
+    const recipesById = {};
+    recipes.forEach((r) => { recipesById[r.id] = r; });
+    const todayList = plan.filter((e) => e.date === todayStr);
+    const nut = App.dayNutrition(todayList, recipesById);
+    const prefs = App.dietPrefs();
+
+    const nutStat = (label, value, sub) => h('div', { class: 'stat' },
+      h('div', { class: 'stat-label' }, label),
+      h('div', { class: 'stat-value' }, value),
+      sub ? h('div', { class: 'muted small' }, sub) : null);
+
+    const fmtMg = (v) => (v ? Math.round(v) + 'mg' : '—');
+    const fmtG = (v) => (v ? App.fmtQty(Math.round(v * 10) / 10) + 'g' : '—');
+
+    const nutritionCard = h('div', { class: 'card' },
+      h('h3', {}, "Today's nutrition"),
+      h('div', { class: 'muted small', style: { marginTop: '2px', marginBottom: '10px' } },
+        nut.meals
+          ? 'Per person, across today’s ' + nut.meals + ' planned meal' + (nut.meals === 1 ? '' : 's') + ' (one serving each).'
+          : 'Plan today’s meals and their combined nutrition shows up here.'),
+      nut.meals ? h('div', {},
+        h('div', { class: 'stat-row', style: { marginBottom: '8px' } },
+          nutStat('Calories', nut.calories || '—'),
+          nutStat('Protein', fmtG(nut.protein_g)),
+          nutStat('Carbs', fmtG(nut.carbs_g),
+            (nut.fiber_g || nut.sugar_g) ? fmtG(nut.fiber_g) + ' fiber · ' + fmtG(nut.sugar_g) + ' sugar' : null),
+          nutStat('Fat', fmtG(nut.fat_g))),
+        h('div', { class: 'stat-row', style: { marginBottom: '8px' } },
+          nutStat('Sodium', fmtMg(nut.sodium_mg)),
+          nutStat('Potassium', fmtMg(nut.potassium_mg)),
+          nutStat('Phosphorus', fmtMg(nut.phosphorus_mg))),
+        prefs.includes('kidney')
+          ? h('div', { class: 'muted small', style: { marginBottom: '6px' } },
+              'Common renal-diet daily targets are ~2,000mg sodium, ~2,000mg potassium, '
+              + '~900mg phosphorus — yours may differ, so use the numbers your care team gave you.')
+          : null,
+        prefs.includes('diabetic')
+          ? h('div', { class: 'muted small', style: { marginBottom: '6px' } },
+              'Carb counts are per serving of each planned meal — handy for spotting heavy days, '
+              + 'not a substitute for reading labels when dosing.')
+          : null,
+        h('div', { class: 'muted small' }, App.NUTRITION_DISCLAIMER)) : null);
 
     /* ----- Smart picks card ----- */
 
@@ -138,6 +187,7 @@ App.registerView('dashboard', {
         stat('Shopping items needed', ((shopping && shopping.items) || []).length, 'shopping')),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: '16px', marginBottom: '16px' } },
         todayCard, weekCard),
+      h('div', { style: { marginBottom: '16px' } }, nutritionCard),
       picksCard);
   },
 });

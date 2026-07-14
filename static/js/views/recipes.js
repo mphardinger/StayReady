@@ -10,6 +10,18 @@ App.registerView('recipes', {
     let search = '';
     let mealFilter = 'all';   // all | breakfast | lunchdinner | any
     let sortBy = 'name';      // name | time | cost | nutrition
+    // Need-based filters (ANDed): 'quick' (≤15 min), 'budget' (≤$2/serving),
+    // plus diet tag slugs. Dietary focus from Settings starts pre-selected.
+    const needs = new Set(App.dietPrefs());
+
+    const passesNeeds = (r) => {
+      for (const n of needs) {
+        if (n === 'quick' && !App.isQuick(r)) return false;
+        if (n === 'budget' && !App.isBudget(r)) return false;
+        if (App.DIETS[n] && !(r.tags || []).includes(n)) return false;
+      }
+      return true;
+    };
 
     const SORTERS = {
       name: (a, b) => a.name.localeCompare(b.name),
@@ -54,7 +66,9 @@ App.registerView('recipes', {
       h('div', { class: 'recipe-head' },
         App.monogram(r.name),
         h('div', { class: 'recipe-name' }, r.name)),
-      h('div', { class: 'recipe-chips' }, App.mealTag(r.meal_type)),
+      h('div', { class: 'recipe-chips' },
+        App.mealTag(r.meal_type),
+        (r.tags || []).map((t) => App.dietChip(t))),
       h('div', { class: 'recipe-chips' },
         App.statChip('time', r),
         App.statChip('cost', r),
@@ -64,7 +78,7 @@ App.registerView('recipes', {
     const drawGrid = () => {
       const q = search.toLowerCase();
       const filtered = recipes
-        .filter((r) => matchesFilter(r) && r.name.toLowerCase().includes(q))
+        .filter((r) => matchesFilter(r) && passesNeeds(r) && r.name.toLowerCase().includes(q))
         .sort(SORTERS[sortBy] || SORTERS.name);
       if (!filtered.length) {
         gridWrap.replaceChildren(h('div', { class: 'card' },
@@ -72,7 +86,7 @@ App.registerView('recipes', {
             h('div', { class: 'big' }, App.icon(recipes.length ? 'search' : 'book', 32)),
             h('div', { class: 'headline' }, recipes.length ? 'Nothing matches' : 'No recipes yet'),
             recipes.length
-              ? 'Try a different search or meal filter.'
+              ? 'Try a different search, meal filter, or fewer "Only show" chips.'
               : 'Add your first recipe and the meal plan practically writes itself.')));
         return;
       }
@@ -132,12 +146,23 @@ App.registerView('recipes', {
             App.statChip('cost', full),
             App.statChip('nutrition', full)),
           full.description ? h('p', { class: 'muted', style: { marginTop: 0 } }, full.description) : null,
-          h('div', { class: 'muted small', style: { fontWeight: 700, marginBottom: '6px' } }, 'Per serving'),
-          h('div', { class: 'stat-row', style: { marginBottom: '18px' } },
+          (full.tags || []).length
+            ? h('div', { class: 'recipe-chips', style: { marginBottom: '12px' } },
+                full.tags.map((t) => App.dietChip(t)))
+            : null,
+          h('div', { class: 'muted small', style: { fontWeight: 700, marginBottom: '6px' } }, 'Per serving (estimated)'),
+          h('div', { class: 'stat-row', style: { marginBottom: '10px' } },
             macro('Calories', full.calories),
             macro('Protein', App.fmtQty(full.protein_g) + 'g'),
             macro('Carbs', App.fmtQty(full.carbs_g) + 'g'),
             macro('Fat', App.fmtQty(full.fat_g) + 'g')),
+          h('div', { class: 'stat-row', style: { marginBottom: '8px' } },
+            macro('Fiber', full.fiber_g ? App.fmtQty(full.fiber_g) + 'g' : '—'),
+            macro('Sugar', full.sugar_g ? App.fmtQty(full.sugar_g) + 'g' : '—'),
+            macro('Sodium', full.sodium_mg ? full.sodium_mg + 'mg' : '—'),
+            macro('Potassium', full.potassium_mg ? full.potassium_mg + 'mg' : '—'),
+            macro('Phosphorus', full.phosphorus_mg ? full.phosphorus_mg + 'mg' : '—')),
+          h('div', { class: 'muted small', style: { marginBottom: '18px' } }, App.NUTRITION_DISCLAIMER),
           h('h3', {}, 'Ingredients ',
             h('span', { class: 'chip' }, full.have_count + '/' + full.ingredient_count + ' on hand')),
           full.ingredients.length
@@ -195,6 +220,7 @@ App.registerView('recipes', {
           if (btn.disabled) return;
           btn.disabled = true;
           const payload = Object.fromEntries(new FormData(e.target).entries());
+          payload.tags = [...e.target.querySelectorAll('.diet-tag-box:checked')].map((c) => c.value);
           payload.ingredients = [...ingWrap.querySelectorAll('.recipe-ing-row')].map((row) => ({
             name: row.querySelector('.ing-name').value.trim(),
             quantity: row.querySelector('.ing-qty').value,
@@ -238,6 +264,22 @@ App.registerView('recipes', {
           numField('Protein (g)', 'protein_g', isEdit ? recipe.protein_g : '', 'any'),
           numField('Carbs (g)', 'carbs_g', isEdit ? recipe.carbs_g : '', 'any'),
           numField('Fat (g)', 'fat_g', isEdit ? recipe.fat_g : '', 'any')),
+        h('div', { class: 'field-row' },
+          numField('Fiber (g)', 'fiber_g', isEdit ? (recipe.fiber_g || '') : '', 'any'),
+          numField('Sugar (g)', 'sugar_g', isEdit ? (recipe.sugar_g || '') : '', 'any'),
+          numField('Sodium (mg)', 'sodium_mg', isEdit ? (recipe.sodium_mg || '') : '', 1),
+          numField('Potassium (mg)', 'potassium_mg', isEdit ? (recipe.potassium_mg || '') : '', 1),
+          numField('Phosphorus (mg)', 'phosphorus_mg', isEdit ? (recipe.phosphorus_mg || '') : '', 1)),
+        h('div', { class: 'field' },
+          h('label', {}, 'Diet tags (only tag what genuinely qualifies)'),
+          h('div', { style: { display: 'flex', gap: '14px', flexWrap: 'wrap' } },
+            Object.entries(App.DIETS).map(([slug, meta]) =>
+              h('label', { class: 'leftover-toggle', style: { marginTop: 0 }, title: meta.explain },
+                h('input', {
+                  type: 'checkbox', class: 'diet-tag-box', value: slug,
+                  checked: isEdit && (recipe.tags || []).includes(slug),
+                }),
+                h('span', {}, meta.label))))),
         h('div', { class: 'field' },
           h('label', {}, 'Ingredients'),
           ingWrap,
@@ -267,6 +309,23 @@ App.registerView('recipes', {
         },
       }, label)));
 
+    // Need chips: time/budget constraints + diet tags, all ANDed together.
+    const NEED_CHOICES = [
+      ['quick', '15 min or less'],
+      ['budget', 'Under $2/serving'],
+      ...Object.entries(App.DIETS).map(([slug, meta]) => [slug, meta.label]),
+    ];
+    const needChips = h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' } },
+      h('span', { class: 'muted small', style: { fontWeight: 700 } }, 'Only show:'),
+      NEED_CHOICES.map(([key, label]) => h('button', {
+        class: 'btn btn-sm' + (needs.has(key) ? ' btn-primary' : ''),
+        onclick: (e) => {
+          needs.has(key) ? needs.delete(key) : needs.add(key);
+          e.currentTarget.classList.toggle('btn-primary', needs.has(key));
+          drawGrid();
+        },
+      }, label)));
+
     const SORTS = [['name', 'Name (A–Z)'], ['time', 'Quickest'], ['cost', 'Cheapest'], ['nutrition', 'Healthiest']];
     const sortSelect = h('select', {
       class: 'select', style: { width: 'auto' }, title: 'Sort recipes',
@@ -289,6 +348,7 @@ App.registerView('recipes', {
           tabs,
           sortSelect,
           h('button', { class: 'btn btn-primary', onclick: () => formModal(null) }, '+ New recipe'))),
+      needChips,
       gridWrap);
 
     drawGrid();
