@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Stay Ready — Meal Planning",
   "short_name": "Stay Ready",
   "description": "Plan the month, stock the pantry, and never wonder what's for dinner.",
@@ -6,7 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FAF6EF",
+  "background_color": "#F4F4F6",
   "theme_color": "#8E1620",
   "categories": ["food", "lifestyle", "productivity"],
   "icons": [

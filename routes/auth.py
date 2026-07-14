@@ -106,6 +106,34 @@ def logout():
     return jsonify(ok=True)
 
 
+@bp.post('/delete_account')
+@require_auth
+@limiter.limit('5 per hour')
+def delete_account():
+    """Permanently delete the signed-in account (Google Play requires this to
+    exist in-app and via the web). Re-confirms the password so a borrowed
+    phone with an open session can't nuke an account. If this was the
+    household's last account, the household and all its data cascade-delete."""
+    data = request.get_json(silent=True) or {}
+    password = data.get('password') or ''
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE id = ?', (g.user['id'],)).fetchone()
+    if not check_password_hash(user['password_hash'], password):
+        return jsonify(error='Wrong password'), 403
+    hh_id = user['household_id']
+    db.execute('DELETE FROM users WHERE id = ?', (user['id'],))
+    remaining = db.execute('SELECT COUNT(*) AS c FROM users WHERE household_id = ?',
+                           (hh_id,)).fetchone()['c']
+    household_deleted = remaining == 0
+    if household_deleted:
+        # Last account: erase the household and everything in it (recipes,
+        # meal plan, pantry, shopping/sale items, expenses — FK cascades).
+        db.execute('DELETE FROM households WHERE id = ?', (hh_id,))
+    db.commit()
+    session.clear()
+    return jsonify(ok=True, household_deleted=household_deleted)
+
+
 @bp.get('/me')
 @require_auth
 def me():

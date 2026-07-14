@@ -64,6 +64,12 @@ def create_app():
     def index():
         return send_from_directory(app.static_folder, 'index.html')
 
+    @app.get('/privacy')
+    def privacy():
+        # Public (no auth) — Google Play requires a reachable privacy policy
+        # and account-deletion URL; this page is both.
+        return send_from_directory(app.static_folder, 'privacy.html')
+
     @app.errorhandler(404)
     def not_found(_e):
         if request.path.startswith('/api/'):

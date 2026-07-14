@@ -93,7 +93,9 @@ App.renderAuth = function renderAuth() {
               isLogin ? 'New here? ' : 'Already have an account? ',
               h('a', {
                 onclick: () => { mode = isLogin ? 'register' : 'login'; error = ''; draw(); },
-              }, isLogin ? 'Create an account' : 'Sign in'))))));
+              }, isLogin ? 'Create an account' : 'Sign in')),
+            h('div', { class: 'auth-switch', style: { marginTop: '8px' } },
+              h('a', { href: '/privacy', target: '_blank' }, 'Privacy policy'))))));
   }
 
   draw();

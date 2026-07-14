@@ -130,6 +130,52 @@ App.registerView('household', {
           h('div', { class: 'grow' },
             h('div', { style: { fontWeight: '700' } }, user.display_name),
             h('div', { class: 'muted small' }, '@' + user.username)),
-          h('button', { class: 'btn', onclick: () => App.logout() }, 'Sign out'))));
+          h('button', { class: 'btn', onclick: () => App.logout() }, 'Sign out'),
+          h('button', { class: 'btn btn-danger', onclick: () => deleteAccountModal() }, 'Delete account')),
+        h('p', { class: 'muted small', style: { marginBottom: 0 } },
+          h('a', { href: '/privacy', target: '_blank', style: { color: 'var(--red)', fontWeight: '700' } },
+            'Privacy policy'),
+          '  ·  Deleting your account is permanent.  If yours is the last account in the '
+          + 'household, all household data is erased too.')));
+
+    function deleteAccountModal() {
+      const pwInput = h('input', {
+        class: 'input', type: 'password', autocomplete: 'current-password',
+        placeholder: 'Your password',
+      });
+      const confirmBtn = h('button', { class: 'btn btn-danger', style: { width: '100%', justifyContent: 'center' } },
+        'Permanently delete my account');
+      confirmBtn.onclick = async () => {
+        if (confirmBtn.disabled) return;
+        if (!pwInput.value) { App.toast('Enter your password to confirm', 'error'); return; }
+        confirmBtn.disabled = true;
+        try {
+          const res = await App.api('/api/auth/delete_account', 'POST', { password: pwInput.value });
+          modal.close();
+          App.state.user = null;
+          App.renderAuth();
+          App.toast(res.household_deleted
+            ? 'Account and household data deleted.  Take care.'
+            : 'Account deleted.  Your housemates keep the household.');
+        } catch (err) {
+          confirmBtn.disabled = false;
+          App.toast(err.message, 'error');
+        }
+      };
+      const modal = App.modal({
+        title: 'Delete account',
+        body: h('div', {},
+          h('p', {}, 'This permanently deletes your login.  There is no undo.'),
+          h('p', { class: 'muted small' },
+            'If you are the last account in this household, every recipe, planned meal, '
+            + 'pantry item, and expense record is erased with it.  If housemates remain, '
+            + 'the shared household stays with them.'),
+          h('div', { class: 'field' },
+            h('label', {}, 'Confirm with your password'),
+            pwInput),
+          confirmBtn),
+      });
+      pwInput.focus();
+    }
   },
 });
