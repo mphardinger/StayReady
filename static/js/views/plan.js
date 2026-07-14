@@ -701,5 +701,14 @@ App.registerView('plan', {
       gridWrap,
       agenda,
       legend);
+
+    // First-run onboarding hands off here: "Build my week" on the welcome
+    // card sets this flag, we open the builder on arrival.
+    try {
+      if (sessionStorage.getItem('sr-open-builder')) {
+        sessionStorage.removeItem('sr-open-builder');
+        openBuilder();
+      }
+    } catch { /* private mode */ }
   },
 });

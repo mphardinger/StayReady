@@ -21,6 +21,36 @@ def _new_invite_code(db):
             return code
 
 
+def _norm_recovery_code(raw):
+    """Recovery codes compare case-insensitively, ignoring dashes/spaces."""
+    return ''.join(ch for ch in str(raw or '').upper() if ch.isalnum())
+
+
+# Unlike passwords, recovery codes are CSPRNG-random (32^8 ≈ 1.1e12 space), so
+# they don't need scrypt-grade stretching — pbkdf2 at 50k iterations keeps an
+# offline attack on a leaked DB infeasible while making signup (9 hashes: the
+# password + 8 codes) fast enough for budget hosting CPUs.
+_CODE_HASH_METHOD = 'pbkdf2:sha256:50000'
+
+
+def _issue_recovery_codes(db, user_id, count=8):
+    """Replace the user's recovery codes with a fresh set. Returns the
+    plaintext codes — the only time they ever exist outside a hash."""
+    db.execute('DELETE FROM recovery_codes WHERE user_id = ?', (user_id,))
+    codes = []
+    for _ in range(count):
+        code = ''.join(secrets.choice(CODE_ALPHABET) for _ in range(8))
+        codes.append(code[:4] + '-' + code[4:])
+        db.execute('INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)',
+                   (user_id, generate_password_hash(code, method=_CODE_HASH_METHOD)))
+    return codes
+
+
+# Burned on lookups for nonexistent usernames so response timing doesn't
+# reveal whether an account exists.
+_DUMMY_HASH = generate_password_hash('dummy-timing-pad')
+
+
 def _user_payload(db, user):
     hh = db.execute('SELECT * FROM households WHERE id = ?', (user['household_id'],)).fetchone()
     return {
@@ -77,12 +107,15 @@ def register():
     cur = db.execute(
         'INSERT INTO users (household_id, username, password_hash, display_name) VALUES (?, ?, ?, ?)',
         (hh_id, username, generate_password_hash(password), display_name))
+    recovery_codes = _issue_recovery_codes(db, cur.lastrowid)
     db.commit()
 
     user = db.execute('SELECT * FROM users WHERE id = ?', (cur.lastrowid,)).fetchone()
     session.permanent = True
     session['user_id'] = user['id']
-    return jsonify(user=_user_payload(db, user)), 201
+    # recovery_codes appear in this response ONCE — the client shows them and
+    # they are never retrievable again (only regenerable).
+    return jsonify(user=_user_payload(db, user), recovery_codes=recovery_codes), 201
 
 
 @bp.post('/login')
@@ -104,6 +137,58 @@ def login():
 def logout():
     session.clear()
     return jsonify(ok=True)
+
+
+@bp.post('/reset_password')
+@limiter.limit('5 per hour')
+def reset_password():
+    """Forgot-password flow: username + one unused recovery code -> new
+    password. The error message never reveals whether the username exists."""
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    code = _norm_recovery_code(data.get('code'))
+    new_password = data.get('new_password') or ''
+    if len(new_password) < 6:
+        return jsonify(error='New password must be at least 6 characters'), 400
+    generic = (jsonify(error='No match for that username and recovery code'), 403)
+
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+    if user is None or not code:
+        check_password_hash(_DUMMY_HASH, code or 'x')  # keep timing flat
+        return generic
+    rows = db.execute(
+        'SELECT * FROM recovery_codes WHERE user_id = ? AND used = 0',
+        (user['id'],)).fetchall()
+    matched = next((r for r in rows if check_password_hash(r['code_hash'], code)), None)
+    if matched is None:
+        return generic
+    db.execute('UPDATE recovery_codes SET used = 1 WHERE id = ?', (matched['id'],))
+    db.execute('UPDATE users SET password_hash = ? WHERE id = ?',
+               (generate_password_hash(new_password), user['id']))
+    db.commit()
+    session.permanent = True
+    session['user_id'] = user['id']
+    remaining = db.execute(
+        'SELECT COUNT(*) AS c FROM recovery_codes WHERE user_id = ? AND used = 0',
+        (user['id'],)).fetchone()['c']
+    return jsonify(user=_user_payload(db, user), codes_left=remaining)
+
+
+@bp.post('/recovery_codes')
+@require_auth
+@limiter.limit('5 per hour')
+def regenerate_recovery_codes():
+    """Fresh set of codes (invalidates all old ones). Password-confirmed so an
+    open session on a borrowed phone can't mint codes for later takeover."""
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE id = ?', (g.user['id'],)).fetchone()
+    if not check_password_hash(user['password_hash'], data.get('password') or ''):
+        return jsonify(error='Wrong password'), 403
+    codes = _issue_recovery_codes(db, user['id'])
+    db.commit()
+    return jsonify(recovery_codes=codes)
 
 
 @bp.post('/delete_account')

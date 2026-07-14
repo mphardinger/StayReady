@@ -131,12 +131,65 @@ App.registerView('household', {
             h('div', { style: { fontWeight: '700' } }, user.display_name),
             h('div', { class: 'muted small' }, '@' + user.username)),
           h('button', { class: 'btn', onclick: () => App.logout() }, 'Sign out'),
+          h('button', { class: 'btn', onclick: () => recoveryCodesModal() }, 'Recovery codes'),
           h('button', { class: 'btn btn-danger', onclick: () => deleteAccountModal() }, 'Delete account')),
         h('p', { class: 'muted small', style: { marginBottom: 0 } },
           h('a', { href: '/privacy', target: '_blank', style: { color: 'var(--red)', fontWeight: '700' } },
             'Privacy policy'),
           '  ·  Deleting your account is permanent.  If yours is the last account in the '
           + 'household, all household data is erased too.')));
+
+    function recoveryCodesModal() {
+      const pwInput = h('input', {
+        class: 'input', type: 'password', autocomplete: 'current-password',
+        placeholder: 'Your password',
+      });
+      const resultWrap = h('div', {});
+      const genBtn = h('button', { class: 'btn btn-primary', style: { width: '100%', justifyContent: 'center' } },
+        'Generate new codes');
+      genBtn.onclick = async () => {
+        if (genBtn.disabled) return;
+        if (!pwInput.value) { App.toast('Enter your password first', 'error'); return; }
+        genBtn.disabled = true;
+        try {
+          const res = await App.api('/api/auth/recovery_codes', 'POST', { password: pwInput.value });
+          resultWrap.replaceChildren(
+            h('div', {
+              style: {
+                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px',
+                fontFamily: 'Consolas, Menlo, monospace', fontWeight: '700',
+                fontSize: '15px', letterSpacing: '1px', margin: '14px 0',
+                padding: '14px', background: 'var(--bg-soft)', borderRadius: '10px',
+              },
+            }, res.recovery_codes.map((c) => h('div', {}, c))),
+            h('button', {
+              class: 'btn', style: { width: '100%', justifyContent: 'center' },
+              onclick: () => {
+                navigator.clipboard.writeText(res.recovery_codes.join('\n'))
+                  .then(() => App.toast('Codes copied — paste them somewhere safe'))
+                  .catch(() => App.toast('Could not copy — screenshot them instead', 'error'));
+              },
+            }, App.icon('copy', 15), 'Copy all'));
+        } catch (err) {
+          genBtn.disabled = false;
+          App.toast(err.message, 'error');
+        }
+      };
+      App.modal({
+        title: 'Recovery codes',
+        body: h('div', {},
+          h('p', { class: 'muted small', style: { marginTop: 0 } },
+            'Recovery codes are the only way back into your account if you forget your '
+            + 'password (there is no email on file).  Generating a new set replaces ALL '
+            + 'of your old codes — save the new ones before closing this.'),
+          h('div', { class: 'field' },
+            h('label', {}, 'Confirm with your password'),
+            pwInput),
+          genBtn,
+          resultWrap),
+      });
+      pwInput.focus();
+    }
 
     function deleteAccountModal() {
       const pwInput = h('input', {

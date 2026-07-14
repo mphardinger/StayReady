@@ -119,10 +119,18 @@ App.registerView('settings', {
     /* ----- About ----- */
 
     const aboutCard = h('div', { class: 'card' },
-      h('h3', {}, 'About these settings'),
-      h('p', { class: 'muted small', style: { margin: 0 } },
-        'Saved on this device only — each housemate’s phone keeps its own preferences. '
-        + 'Household-wide things (members, budget, invite code) live under House.'));
+      h('h3', {}, 'About'),
+      h('p', { class: 'muted small' },
+        'These settings are saved on this device only — each housemate’s phone keeps '
+        + 'its own preferences.  Household-wide things (members, budget, invite code) '
+        + 'live under House.'),
+      h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+        h('a', {
+          class: 'btn btn-sm',
+          href: 'mailto:mphardinger@gmail.com?subject=' + encodeURIComponent('Stay Ready feedback')
+            + '&body=' + encodeURIComponent('What happened:\n\n\nWhat I expected:\n\n\n(Sent from Stay Ready settings)'),
+        }, 'Report a problem'),
+        h('a', { class: 'btn btn-sm', href: '/privacy', target: '_blank' }, 'Privacy policy')));
 
     container.replaceChildren(
       h('div', { class: 'view-head' },

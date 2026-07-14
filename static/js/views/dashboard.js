@@ -19,6 +19,46 @@ App.registerView('dashboard', {
     const dateLine = new Date().toLocaleDateString(undefined,
       { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+    /* ----- First-run welcome (set at registration, dismissed once) ----- */
+
+    let welcome = false;
+    try { welcome = localStorage.getItem('sr-welcome') === '1'; } catch { /* private mode */ }
+    const dismissWelcome = () => {
+      try { localStorage.removeItem('sr-welcome'); } catch { /* private mode */ }
+      App.renderCurrent();
+    };
+    const welcomeCard = !welcome ? null : h('div', { class: 'card', style: { marginBottom: '16px' } },
+      h('h3', {}, 'Welcome to Stay Ready 🥕'),
+      h('p', { class: 'muted small' }, 'Two moves and dinner is handled for the week:'),
+      h('div', { class: 'rowline' },
+        h('div', { class: 'grow' },
+          h('div', { class: 'bold' }, '1.  Get your housemates in'),
+          h('div', { class: 'muted small' }, 'Everyone shares one plan, pantry, and grocery split.')),
+        h('button', {
+          class: 'btn btn-sm',
+          onclick: () => {
+            navigator.clipboard.writeText(App.state.user.invite_code)
+              .then(() => App.toast('Invite code ' + App.state.user.invite_code + ' copied — text it to them'))
+              .catch(() => App.toast('Your invite code: ' + App.state.user.invite_code, 'error'));
+          },
+        }, App.icon('copy', 14), 'Copy invite code')),
+      h('div', { class: 'rowline' },
+        h('div', { class: 'grow' },
+          h('div', { class: 'bold' }, '2.  Let it plan your week'),
+          h('div', { class: 'muted small' }, 'Pick a budget and max cook time — it drafts 7 dinners you can shuffle.')),
+        h('button', {
+          class: 'btn btn-accent btn-sm',
+          onclick: () => {
+            try { sessionStorage.setItem('sr-open-builder', '1'); } catch { /* private mode */ }
+            dismissWelcome();
+            App.navigate('plan');
+          },
+        }, App.icon('shuffle', 14), 'Build my week')),
+      h('div', { class: 'rowline', style: { borderBottom: 'none', paddingBottom: 0 } },
+        h('div', { class: 'grow muted small' },
+          'Then the Shopping tab knows exactly what to buy.'),
+        h('button', { class: 'btn btn-ghost btn-sm', onclick: dismissWelcome }, 'Got it')));
+
     /* ----- Today card ----- */
 
     const todayEntries = {};
@@ -181,6 +221,7 @@ App.registerView('dashboard', {
             class: 'btn btn-sm', href: '/api/calendar/export.ics',
             title: 'Download your meal plan (.ics) for Google Calendar',
           }, App.icon('download', 15), 'Export to calendar'))),
+      welcomeCard,
       h('div', { class: 'stat-row', style: { marginBottom: '16px' } },
         stat('Meals planned this week', plan.length, 'plan'),
         stat('Recipes in the box', recipes.length, 'recipes'),

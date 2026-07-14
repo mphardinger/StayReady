@@ -80,6 +80,17 @@ web app. If the update added or improved seed recipes, also run
 Free accounts must click **Run until 3 months from today** on the Web tab
 periodically to keep the app alive.
 
+**Daily backups** (one-time setup): PythonAnywhere's free tier includes one
+scheduled task. On the **Tasks** tab, create a daily task with the command:
+
+```
+python3.10 /home/StayReady/stayready/backup_db.py
+```
+
+That snapshots the database into `~/stayready/backups/` with 14-day rotation.
+Occasionally download a copy off-host (Files tab → backups → download) in
+case the hosting account itself is ever lost.
+
 ## What's inside
 
 - **Today** — today's meals, who's cooking, the week ahead, smart picks, and a

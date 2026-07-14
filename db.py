@@ -95,6 +95,17 @@ CREATE TABLE IF NOT EXISTS meal_plan (
     UNIQUE (household_id, date, meal_type)
 );
 
+-- Password-recovery codes: shown once at signup (or regenerated from the
+-- Account card), stored only as hashes, single-use. The app collects no
+-- email, so these are the way back into a forgotten-password account.
+CREATE TABLE IF NOT EXISTS recovery_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- "On sale this week" list typed in from a store flyer; the recipe
 -- recommendations and week builder prioritize recipes using these items.
 CREATE TABLE IF NOT EXISTS sale_items (
