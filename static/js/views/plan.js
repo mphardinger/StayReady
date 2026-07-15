@@ -297,22 +297,109 @@ App.registerView('plan', {
       drawRows();
     };
 
-    /* ----- week builder: draft 7 dinners around budget / time / diet ----- */
+    /* ----- autofill builder: draft a week or a month of dinners around a
+       chosen priority (cost / time / nutrition / favorites) + hard limits ----- */
 
     const openBuilder = async () => {
-      const days = [];
-      for (let i = 0; i < 7; i++) days.push(App.fmtDate(App.addDays(App.today(), i)));
-      // The builder's window is always today+7, which can extend past (or sit
-      // entirely outside) the month range this view fetched into byKey — so it
-      // fetches its own week. Anything less risks silently overwriting meals.
-      let planned;
-      try {
-        const weekPlan = await App.api('/api/plan?start=' + days[0] + '&end=' + days[6]);
+      let days = [];
+      let planned = {};
+
+      const daysFor = (rangeKey) => {
+        const out = [];
+        if (rangeKey === 'month') {
+          // Rest of the DISPLAYED month (from today if that's the current month).
+          const start = App.today() > month ? App.today() : month;
+          for (let d = start; d <= monthEnd; d = App.addDays(d, 1)) out.push(App.fmtDate(d));
+        } else {
+          for (let i = 0; i < 7; i++) out.push(App.fmtDate(App.addDays(App.today(), i)));
+        }
+        return out;
+      };
+
+      // The builder fetches its own window — it can extend past (or sit
+      // entirely outside) the month range this view fetched into byKey.
+      // Anything less risks silently overwriting meals.
+      const loadRange = async (rangeKey) => {
+        const next = daysFor(rangeKey);
+        if (!next.length) return false;
+        const plan2 = await App.api('/api/plan?start=' + next[0] + '&end=' + next[next.length - 1]);
+        days = next;
         planned = {};
-        weekPlan.forEach((e) => { planned[e.date + '|' + e.meal_type] = e; });
+        plan2.forEach((e) => { planned[e.date + '|' + e.meal_type] = e; });
+        return true;
+      };
+
+      // "My favorites" = what this household actually planned and cooked over
+      // the past 90 days (cooked counts double; leftovers don't count twice).
+      const favCounts = {};
+      try {
+        const [ok, history] = await Promise.all([
+          loadRange('week'),
+          App.api('/api/plan?start=' + App.fmtDate(App.addDays(App.today(), -90))
+            + '&end=' + App.fmtDate(App.today())),
+        ]);
+        if (!ok) return;
+        history.forEach((e) => {
+          if (e.leftover) return;
+          favCounts[e.recipe.id] = (favCounts[e.recipe.id] || 0) + (e.cooked ? 2 : 1);
+        });
       } catch (err) { App.toast(err.message, 'error'); return; }
+      const hasHistory = Object.keys(favCounts).length > 0;
       const recipesById = {};
       recipes.forEach((r) => { recipesById[r.id] = r; });
+
+      let range = 'week';
+      let priority = 'balanced';
+      let rangeLoading = false;
+
+      const rangeChips = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+        [['week', 'Next 7 days'], ['month', 'Rest of this month']].map(([key, label]) => h('button', {
+          class: 'btn btn-sm' + (range === key ? ' btn-primary' : ''), type: 'button',
+          'data-range': key,
+          onclick: async (e) => {
+            if (rangeLoading || range === key) return;
+            if (key === 'month' && monthEnd < App.today()) {
+              App.toast('This month is already over — flip the calendar forward first', 'error');
+              return;
+            }
+            rangeLoading = true;
+            try {
+              await loadRange(key);
+              range = key;
+              draft = {};
+              draftWrap.replaceChildren();
+              acceptBtn.style.display = 'none';
+              [...e.currentTarget.parentElement.children].forEach((b) =>
+                b.classList.toggle('btn-primary', b.dataset.range === key));
+            } catch (err) { App.toast(err.message, 'error'); }
+            rangeLoading = false;
+          },
+        }, label)));
+
+      // The question that drives the picks: what should "best" mean?
+      const PRIORITIES = [
+        ['balanced', 'Balanced'],
+        ['cost', 'Cheapest'],
+        ['time', 'Quickest'],
+        ['nutrition', 'Healthiest'],
+        ['favorites', 'My favorites'],
+      ];
+      const priorityChips = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+        PRIORITIES.map(([key, label]) => h('button', {
+          class: 'btn btn-sm' + (priority === key ? ' btn-primary' : ''), type: 'button',
+          'data-priority': key,
+          title: key === 'favorites'
+            ? 'What your household actually planned and cooked in the last 90 days'
+            : '',
+          onclick: (e) => {
+            priority = key;
+            [...e.currentTarget.parentElement.children].forEach((b) =>
+              b.classList.toggle('btn-primary', b.dataset.priority === key));
+            if (key === 'favorites' && !hasHistory) {
+              App.toast('No cooking history yet — favorites will act like Balanced until you\'ve cooked a few meals');
+            }
+          },
+        }, label)));
 
       const budgetInput = h('input', {
         class: 'input', type: 'number', step: 'any', min: 0, value: '5.00',
@@ -365,8 +452,19 @@ App.registerView('plan', {
           && (capPerServing === null || r.cost_per_serving <= capPerServing));
       };
 
+      // Lower = better. The chosen priority sets the primary metric (scaled so
+      // one "point" is roughly a dollar); sale items and pantry coverage nudge
+      // every mode the same way.
+      const PRIMARY = {
+        cost: (r) => r.cost_per_serving,
+        time: (r) => r.time_minutes / 12,
+        nutrition: (r) => -r.nutrition_score / 25,
+        favorites: (r) => -(favCounts[r.id] || 0) * 1.2 + r.cost_per_serving * 0.15,
+        balanced: (r) => r.cost_per_serving + r.time_minutes / 30 - r.nutrition_score / 60,
+      };
       const score = (r) => {
-        let s = r.cost_per_serving;
+        const key = (priority === 'favorites' && !hasHistory) ? 'balanced' : priority;
+        let s = PRIMARY[key](r);
         if (salesBox.checked && onSale(r)) s -= 0.75;
         if (r.ingredient_count > 0) s -= 0.4 * (r.have_count / r.ingredient_count);
         return s;
@@ -392,8 +490,11 @@ App.registerView('plan', {
           .map((off) => recipeOn(App.fmtDate(App.addDays(App.parseDate(dateStr), off))))
           .filter(Boolean)
           .map((r) => r.id);
+        // Repeat cap scales with the window: a week allows 2 uses of a recipe,
+        // a full month allows ~4 — variety without demanding 30 unique dinners.
+        const maxUses = Math.max(2, Math.ceil(days.length / 8));
         const pool = candidatesFor()
-          .filter((r) => r.id !== exclude && (used[r.id] || 0) < 2 && !neighborIds.includes(r.id))
+          .filter((r) => r.id !== exclude && (used[r.id] || 0) < maxUses && !neighborIds.includes(r.id))
           .sort((a, b) => score(a) - score(b))
           .slice(0, 8);
         if (!pool.length) return null;
@@ -423,6 +524,8 @@ App.registerView('plan', {
                 App.statChip('cost', r),
                 App.statChip('time', r),
                 salesBox.checked && onSale(r) ? h('span', { class: 'chip chip-gold' }, 'on sale') : null,
+                priority === 'favorites' && favCounts[r.id]
+                  ? h('span', { class: 'chip chip-gold' }, 'cooked ' + favCounts[r.id] + '×') : null,
                 (r.tags || []).filter((t) => dietNeeds.has(t)).map((t) => App.dietChip(t)))),
             h('button', {
               class: 'btn btn-sm btn-icon', title: 'Shuffle this day', type: 'button',
@@ -451,8 +554,8 @@ App.registerView('plan', {
             + (leftoverBox.checked ? ' + their leftover lunches' : '');
           summary = h('div', { style: { marginTop: '12px' } },
             h('div', { class: 'bold' },
-              'Est. ' + App.fmtMoney(perDay) + '/person/day — ' + mealsCovered + ' for '
-              + App.fmtMoney(totalCost) + '/person this week'),
+              'Est. ' + App.fmtMoney(perDay) + '/person/day — ' + mealsCovered + ', '
+              + App.fmtMoney(totalCost) + '/person across ' + days.length + ' days'),
             budget !== null ? h('div', {
               class: 'small',
               style: { fontWeight: 700, color: perDay <= budget ? 'var(--ink-soft)' : 'var(--red-deep)', marginTop: '3px' },
@@ -472,7 +575,7 @@ App.registerView('plan', {
         draft = {};
         const open = days.filter((d) => !planned[d + '|dinner']);
         if (!open.length) {
-          App.toast('Every dinner this week is already planned', 'error');
+          App.toast('Every dinner in this range is already planned', 'error');
           return;
         }
         for (const d of open) {
@@ -499,6 +602,7 @@ App.registerView('plan', {
           let saved = 0;
           try {
             for (const [dateStr, r] of entries2) {
+              acceptBtn.textContent = 'Saving ' + (saved + 1) + '/' + entries2.length + '…';
               await App.api('/api/plan', 'PUT', {
                 date: dateStr, meal_type: 'dinner', recipe_id: r.id,
                 cook_member_id: null,
@@ -513,18 +617,23 @@ App.registerView('plan', {
             App.renderCurrent();
           } catch (err) {
             acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Accept & plan it';
             App.toast(err.message + (saved ? ' — ' + saved + ' saved before the error' : ''), 'error');
           }
         },
       }, 'Accept & plan it');
 
       const modal = App.modal({
-        title: 'Build my week',
+        title: 'Autofill meals',
         wide: true,
         body: h('div', {},
           h('p', { class: 'muted small', style: { marginTop: 0 } },
-            'Drafts the next 7 dinners around your budget, time, and diet limits. '
+            'Drafts a dinner for every open day, picked the way you choose below. '
             + 'You review every pick before anything is saved.'),
+          h('div', { class: 'field', style: { marginBottom: '12px' } },
+            h('label', {}, 'Fill'), rangeChips),
+          h('div', { class: 'field', style: { marginBottom: '12px' } },
+            h('label', {}, 'Pick meals by'), priorityChips),
           h('div', { class: 'field-row', style: { alignItems: 'flex-end' } },
             h('div', { class: 'field', style: { marginBottom: 0 } },
               h('label', {}, 'Budget per person per day ($)'),
@@ -679,7 +788,7 @@ App.registerView('plan', {
           h('div', { class: 'view-sub' }, sub)),
         h('div', { class: 'view-actions' },
           h('button', { class: 'btn btn-accent', onclick: openBuilder },
-            App.icon('shuffle', 15), 'Build my week'),
+            App.icon('shuffle', 15), 'Autofill'),
           h('div', { class: 'bold', style: { fontSize: '17px', minWidth: '160px', textAlign: 'center' } },
             App.monthLabel(month)),
           h('button', {
