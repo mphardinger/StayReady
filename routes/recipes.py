@@ -2,7 +2,9 @@ import math
 
 from flask import Blueprint, jsonify, request
 
+import recipe_import
 from db import get_db, nutrition_score
+from extensions import limiter
 from routes.common import MEAL_TYPES, household_id, norm_name, require_auth
 
 bp = Blueprint('recipes', __name__, url_prefix='/api/recipes')
@@ -213,6 +215,28 @@ def get_recipe(recipe_id):
     return jsonify(_recipe_json(recipe, _ingredients_for(db, recipe_id),
                                 _pantry_norms(db, household_id()),
                                 include_instructions=True))
+
+
+@bp.post('/import')
+@require_auth
+@limiter.limit('30 per hour')
+def import_recipe():
+    """Parse a recipe URL (schema.org JSON-LD) or pasted recipe text into a
+    DRAFT for the add-recipe form. Nothing is saved here — the user reviews,
+    adjusts (especially cost, which sites never provide), and saves normally."""
+    data = request.get_json(silent=True) or {}
+    url = str(data.get('url') or '').strip()
+    text = str(data.get('text') or '').strip()
+    try:
+        if url:
+            draft = recipe_import.draft_from_url(url)
+        elif text:
+            draft = recipe_import.draft_from_text(text)
+        else:
+            return jsonify(error='Give me a link or some recipe text'), 400
+    except recipe_import.ImportError_ as err:
+        return jsonify(error=str(err)), 422
+    return jsonify(draft=draft)
 
 
 @bp.post('')

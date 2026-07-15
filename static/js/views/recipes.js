@@ -190,10 +190,12 @@ App.registerView('recipes', {
       } catch (err) { App.toast(err.message, 'error'); }
     };
 
-    /* ---------- Add / edit form modal ---------- */
+    /* ---------- Add / edit form modal ----------
+       recipe: null = blank create; with id = edit; without id = import DRAFT
+       (prefilled create — review, then save as a new recipe). */
 
     const formModal = (recipe) => {
-      const isEdit = Boolean(recipe);
+      const isEdit = Boolean(recipe && recipe.id);
 
       const numField = (label, name, value, step) => h('div', { class: 'field' },
         h('label', {}, label),
@@ -244,32 +246,32 @@ App.registerView('recipes', {
       },
         h('div', { class: 'field' },
           h('label', {}, 'Name'),
-          h('input', { class: 'input', name: 'name', required: true, maxlength: 80, placeholder: 'e.g. Veggie Scramble', value: isEdit ? recipe.name : '' })),
+          h('input', { class: 'input', name: 'name', required: true, maxlength: 80, placeholder: 'e.g. Veggie Scramble', value: recipe ? recipe.name : '' })),
         h('div', { class: 'field-row' },
           h('div', { class: 'field' },
             h('label', {}, 'Meal type'),
             h('select', { class: 'select', name: 'meal_type' },
               MEAL_CHOICES.map((mt) => h('option', {
                 value: mt,
-                selected: mt === (isEdit ? recipe.meal_type : 'dinner'),
+                selected: mt === (recipe ? recipe.meal_type : 'dinner'),
               }, mealLabel(mt))))),
-          numField('Time (minutes)', 'time_minutes', isEdit ? recipe.time_minutes : 30, 1),
-          numField('Servings', 'servings', isEdit ? recipe.servings : 4, 1),
-          numField('Total cost ($)', 'cost_total', isEdit ? recipe.cost_total : '', 'any')),
+          numField('Time (minutes)', 'time_minutes', recipe ? recipe.time_minutes : 30, 1),
+          numField('Servings', 'servings', recipe ? recipe.servings : 4, 1),
+          numField('Total cost ($)', 'cost_total', recipe && recipe.cost_total ? recipe.cost_total : '', 'any')),
         h('div', { class: 'field' },
           h('label', {}, 'Description'),
-          h('input', { class: 'input', name: 'description', maxlength: 200, placeholder: 'A one-liner to sell it', value: isEdit ? recipe.description : '' })),
+          h('input', { class: 'input', name: 'description', maxlength: 200, placeholder: 'A one-liner to sell it', value: recipe ? recipe.description : '' })),
         h('div', { class: 'field-row' },
-          numField('Calories / serving', 'calories', isEdit ? recipe.calories : '', 1),
-          numField('Protein (g)', 'protein_g', isEdit ? recipe.protein_g : '', 'any'),
-          numField('Carbs (g)', 'carbs_g', isEdit ? recipe.carbs_g : '', 'any'),
-          numField('Fat (g)', 'fat_g', isEdit ? recipe.fat_g : '', 'any')),
+          numField('Calories / serving', 'calories', recipe ? (recipe.calories || '') : '', 1),
+          numField('Protein (g)', 'protein_g', recipe ? (recipe.protein_g || '') : '', 'any'),
+          numField('Carbs (g)', 'carbs_g', recipe ? (recipe.carbs_g || '') : '', 'any'),
+          numField('Fat (g)', 'fat_g', recipe ? (recipe.fat_g || '') : '', 'any')),
         h('div', { class: 'field-row' },
-          numField('Fiber (g)', 'fiber_g', isEdit ? (recipe.fiber_g || '') : '', 'any'),
-          numField('Sugar (g)', 'sugar_g', isEdit ? (recipe.sugar_g || '') : '', 'any'),
-          numField('Sodium (mg)', 'sodium_mg', isEdit ? (recipe.sodium_mg || '') : '', 1),
-          numField('Potassium (mg)', 'potassium_mg', isEdit ? (recipe.potassium_mg || '') : '', 1),
-          numField('Phosphorus (mg)', 'phosphorus_mg', isEdit ? (recipe.phosphorus_mg || '') : '', 1)),
+          numField('Fiber (g)', 'fiber_g', recipe ? (recipe.fiber_g || '') : '', 'any'),
+          numField('Sugar (g)', 'sugar_g', recipe ? (recipe.sugar_g || '') : '', 'any'),
+          numField('Sodium (mg)', 'sodium_mg', recipe ? (recipe.sodium_mg || '') : '', 1),
+          numField('Potassium (mg)', 'potassium_mg', recipe ? (recipe.potassium_mg || '') : '', 1),
+          numField('Phosphorus (mg)', 'phosphorus_mg', recipe ? (recipe.phosphorus_mg || '') : '', 1)),
         h('div', { class: 'field' },
           h('label', {}, 'Diet tags (only tag what genuinely qualifies)'),
           h('div', { style: { display: 'flex', gap: '14px', flexWrap: 'wrap' } },
@@ -277,7 +279,7 @@ App.registerView('recipes', {
               h('label', { class: 'leftover-toggle', style: { marginTop: 0 }, title: meta.explain },
                 h('input', {
                   type: 'checkbox', class: 'diet-tag-box', value: slug,
-                  checked: isEdit && (recipe.tags || []).includes(slug),
+                  checked: Boolean(recipe) && (recipe.tags || []).includes(slug),
                 }),
                 h('span', {}, meta.label))))),
         h('div', { class: 'field' },
@@ -289,11 +291,58 @@ App.registerView('recipes', {
           }, '+ ingredient')),
         h('div', { class: 'field' },
           h('label', {}, 'Instructions (one step per line)'),
-          h('textarea', { class: 'input', name: 'instructions', rows: 6, placeholder: 'Crack the eggs…\nWhisk with a pinch of salt…\nScramble low and slow.', value: isEdit ? recipe.instructions : '' })),
+          h('textarea', { class: 'input', name: 'instructions', rows: 6, placeholder: 'Crack the eggs…\nWhisk with a pinch of salt…\nScramble low and slow.', value: recipe ? recipe.instructions : '' })),
         h('button', { class: 'btn btn-primary', type: 'submit', style: { width: '100%', justifyContent: 'center' } },
           isEdit ? 'Save recipe' : 'Add recipe'));
 
-      const modal = App.modal({ title: isEdit ? 'Edit ' + recipe.name : 'New recipe', body: form, wide: true });
+      const modal = App.modal({ title: isEdit ? 'Edit ' + recipe.name : (recipe ? 'Review imported recipe' : 'New recipe'), body: form, wide: true });
+    };
+
+    /* ---------- Import from link / pasted text ---------- */
+
+    const importModal = () => {
+      const urlInput = h('input', {
+        class: 'input', type: 'url', placeholder: 'https://www.allrecipes.com/recipe/…',
+      });
+      const textArea = h('textarea', {
+        class: 'input', rows: 7,
+        placeholder: 'Chicken Fried Rice\n\nIngredients\n2 cups rice\n2 eggs\n…\n\nInstructions\nCook the rice…',
+      });
+      const goBtn = h('button', {
+        class: 'btn btn-primary', style: { width: '100%', justifyContent: 'center' },
+      }, 'Import');
+      goBtn.onclick = async () => {
+        if (goBtn.disabled) return;
+        const url = urlInput.value.trim();
+        const text = textArea.value.trim();
+        if (!url && !text) { App.toast('Paste a link or the recipe text first', 'error'); return; }
+        goBtn.disabled = true;
+        goBtn.textContent = 'Importing…';
+        try {
+          const res = await App.api('/api/recipes/import', 'POST', url ? { url } : { text });
+          modal.close();
+          formModal(res.draft);
+          App.toast('Imported — give it a once-over.  Sites never include cost, so add yours.');
+        } catch (err) {
+          goBtn.disabled = false;
+          goBtn.textContent = 'Import';
+          App.toast(err.message, 'error');
+        }
+      };
+      const modal = App.modal({
+        title: 'Import a recipe',
+        body: h('div', {},
+          h('div', { class: 'field' },
+            h('label', {}, 'Recipe link'),
+            urlInput),
+          h('div', { class: 'muted small', style: { margin: '2px 0 12px' } },
+            'Works with most recipe sites.  If a site can’t be reached, use the box below.'),
+          h('div', { class: 'field' },
+            h('label', {}, '…or paste the recipe text'),
+            textArea),
+          goBtn),
+      });
+      urlInput.focus();
     };
 
     /* ---------- Header controls ---------- */
@@ -347,6 +396,7 @@ App.registerView('recipes', {
           searchBox,
           tabs,
           sortSelect,
+          h('button', { class: 'btn', onclick: importModal }, App.icon('download', 15), 'Import'),
           h('button', { class: 'btn btn-primary', onclick: () => formModal(null) }, '+ New recipe'))),
       needChips,
       gridWrap);
